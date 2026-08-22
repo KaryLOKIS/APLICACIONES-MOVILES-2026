@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
 
 void main() {
   runApp(const PetCareApp());
@@ -33,7 +35,6 @@ class Inicio extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-
               const Icon(
                 Icons.pets,
                 size: 120,
@@ -64,20 +65,36 @@ class Inicio extends StatelessWidget {
 
               const SizedBox(height: 45),
 
+              // BOTÓN INICIAR SESIÓN
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                    );
+                  },
                   child: const Text("Iniciar sesión"),
                 ),
               ),
 
               const SizedBox(height: 15),
 
+              // BOTÓN REGISTRARSE
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    );
+                  },
                   child: const Text("Registrarse"),
                 ),
               ),
