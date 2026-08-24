@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,21 +21,51 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void iniciarSesion() {
+    final correo = correoController.text.trim();
+    final password = passwordController.text.trim();
+
+    // Validar que los campos no estén vacíos
+    if (correo.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Por favor, completa el correo y la contraseña.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Si los datos están completos, entrar a la pantalla principal
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomeScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.teal.shade50,
+
       appBar: AppBar(
         title: const Text('Iniciar sesión'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(25),
+
         child: Column(
           children: [
             const SizedBox(height: 35),
 
+            // ICONO
             const Icon(
               Icons.pets,
               size: 90,
@@ -43,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 20),
 
+            // TITULO
             const Text(
               'Bienvenido a PetCare',
               textAlign: TextAlign.center,
@@ -65,6 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 35),
 
+            // CORREO
             TextField(
               controller: correoController,
               keyboardType: TextInputType.emailAddress,
@@ -72,6 +105,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 labelText: 'Correo electrónico',
                 hintText: 'ejemplo@correo.com',
                 prefixIcon: const Icon(Icons.email),
+                filled: true,
+                fillColor: Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -80,12 +115,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 20),
 
+            // CONTRASEÑA
             TextField(
               controller: passwordController,
               obscureText: ocultarPassword,
               decoration: InputDecoration(
                 labelText: 'Contraseña',
                 prefixIcon: const Icon(Icons.lock),
+
                 suffixIcon: IconButton(
                   icon: Icon(
                     ocultarPassword
@@ -98,6 +135,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     });
                   },
                 ),
+
+                filled: true,
+                fillColor: Colors.white,
+
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -106,10 +147,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 10),
 
+            // OLVIDASTE CONTRASEÑA
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'La recuperación de contraseña estará disponible próximamente.',
+                      ),
+                    ),
+                  );
+                },
                 child: const Text(
                   '¿Olvidaste tu contraseña?',
                 ),
@@ -118,21 +168,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 15),
 
+            // BOTÓN INICIAR SESIÓN
             SizedBox(
               width: double.infinity,
               height: 52,
+
               child: ElevatedButton(
-                onPressed: () {
-                  // Más adelante conectaremos este botón
-                  // con el backend de PetCare.
-                },
+                onPressed: iniciarSesion,
+
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal,
                   foregroundColor: Colors.white,
+
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+
                 child: const Text(
                   'Iniciar sesión',
                   style: TextStyle(
@@ -145,13 +197,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 20),
 
+            // REGISTRO
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('¿No tienes una cuenta?'),
+                const Text(
+                  '¿No tienes una cuenta?',
+                ),
+
                 TextButton(
-                  onPressed: () {},
-                  child: const Text('Registrarse'),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    'Registrarse',
+                  ),
                 ),
               ],
             ),
