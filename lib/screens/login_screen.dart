@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
+import '../services/database_service.dart';
+import '../services/secure_storage_service.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -9,10 +13,22 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController correoController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController correoController =
+      TextEditingController();
+
+  final TextEditingController passwordController =
+      TextEditingController();
+
+  final DatabaseService _databaseService =
+      DatabaseService.instance;
+
+  final SecureStorageService _secureStorage =
+      SecureStorageService.instance;
+
+  final Uuid _uuid = const Uuid();
 
   bool ocultarPassword = true;
+  bool iniciandoSesion = false;
 
   @override
   void dispose() {
@@ -21,11 +37,13 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void iniciarSesion() {
+  Future<void> iniciarSesion() async {
     final correo = correoController.text.trim();
-    final password = passwordController.text.trim();
 
-    // Validar que los campos no estén vacíos
+    // No hacemos trim de la contraseña porque los espacios
+    // podrían formar parte de la contraseña real.
+    final password = passwordController.text;
+
     if (correo.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -35,16 +53,100 @@ class _LoginScreenState extends State<LoginScreen> {
           backgroundColor: Colors.red,
         ),
       );
+
       return;
     }
 
-    // Si los datos están completos, entrar a la pantalla principal
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HomeScreen(),
-      ),
-    );
+    setState(() {
+      iniciandoSesion = true;
+    });
+
+    try {
+      final usuario = await _databaseService.validarCredenciales(
+        correo: correo,
+        password: password,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (usuario == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Correo o contraseña incorrectos.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        return;
+      }
+
+      /*
+       * La autenticación local fue correcta.
+       *
+       * Como todavía no tenemos un backend,
+       * generamos un identificador único de sesión
+       * y lo almacenamos mediante flutter_secure_storage.
+       *
+       * En una versión conectada a una API,
+       * aquí se almacenaría el token entregado por el servidor.
+       */
+      final tokenSesion = _uuid.v4();
+
+      await _secureStorage.guardarTokenSesion(
+        tokenSesion,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Inicio de sesión correcto. 🐾',
+          ),
+          backgroundColor: Colors.teal,
+        ),
+      );
+
+      await Future.delayed(
+        const Duration(milliseconds: 500),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo iniciar la sesión: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          iniciandoSesion = false;
+        });
+      }
+    }
   }
 
   @override
@@ -53,7 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.teal.shade50,
 
       appBar: AppBar(
-        title: const Text('Iniciar sesión'),
+        title: const Text(
+          'Iniciar sesión',
+        ),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
@@ -65,7 +169,6 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const SizedBox(height: 35),
 
-            // ICONO
             const Icon(
               Icons.pets,
               size: 90,
@@ -74,7 +177,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 20),
 
-            // TITULO
             const Text(
               'Bienvenido a PetCare',
               textAlign: TextAlign.center,
@@ -97,14 +199,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 35),
 
-            // CORREO
             TextField(
               controller: correoController,
               keyboardType: TextInputType.emailAddress,
+
               decoration: InputDecoration(
                 labelText: 'Correo electrónico',
                 hintText: 'ejemplo@correo.com',
-                prefixIcon: const Icon(Icons.email),
+                prefixIcon: const Icon(
+                  Icons.email,
+                ),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -115,13 +219,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 20),
 
-            // CONTRASEÑA
             TextField(
               controller: passwordController,
               obscureText: ocultarPassword,
+
               decoration: InputDecoration(
                 labelText: 'Contraseña',
-                prefixIcon: const Icon(Icons.lock),
+
+                prefixIcon: const Icon(
+                  Icons.lock,
+                ),
 
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -129,9 +236,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? Icons.visibility
                         : Icons.visibility_off,
                   ),
+
                   onPressed: () {
                     setState(() {
-                      ocultarPassword = !ocultarPassword;
+                      ocultarPassword =
+                          !ocultarPassword;
                     });
                   },
                 ),
@@ -147,9 +256,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 10),
 
-            // OLVIDASTE CONTRASEÑA
             Align(
               alignment: Alignment.centerRight,
+
               child: TextButton(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 },
+
                 child: const Text(
                   '¿Olvidaste tu contraseña?',
                 ),
@@ -168,38 +278,62 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 15),
 
-            // BOTÓN INICIAR SESIÓN
             SizedBox(
               width: double.infinity,
               height: 52,
 
               child: ElevatedButton(
-                onPressed: iniciarSesion,
+                onPressed:
+                    iniciandoSesion
+                        ? null
+                        : iniciarSesion,
 
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal,
                   foregroundColor: Colors.white,
 
+                  disabledBackgroundColor:
+                      Colors.teal.shade200,
+
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(12),
                   ),
                 ),
 
-                child: const Text(
-                  'Iniciar sesión',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: iniciandoSesion
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2.5,
+
+                          valueColor:
+                              AlwaysStoppedAnimation<
+                                  Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Text(
+                        'Iniciar sesión',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // REGISTRO
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+
               children: [
                 const Text(
                   '¿No tienes una cuenta?',
@@ -209,6 +343,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () {
                     Navigator.pop(context);
                   },
+
                   child: const Text(
                     'Registrarse',
                   ),

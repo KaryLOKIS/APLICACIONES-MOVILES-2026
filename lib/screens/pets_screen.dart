@@ -1,4 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
+import '../models/pet.dart';
+import '../services/database_service.dart';
 import 'pet_detail_screen.dart';
 
 class PetsScreen extends StatefulWidget {
@@ -8,339 +16,505 @@ class PetsScreen extends StatefulWidget {
   State<PetsScreen> createState() => _PetsScreenState();
 }
 
-class _PetsScreenState extends State<PetsScreen> {
-  // Lista de mascotas
-  final List<Map<String, String>> mascotas = [
-    {
-      'nombre': 'NIR',
-      'especie': 'Perro',
-      'raza': 'Labrador',
-      'edad': '3 años',
-    },
-  ];
+class _PetsScreenState extends State<PetsScreen>
+    with WidgetsBindingObserver {
+  final DatabaseService _databaseService = DatabaseService.instance;
+  final Uuid _uuid = const Uuid();
+  final Connectivity _connectivity = Connectivity();
 
-  // Color principal de la aplicación
-  final Color colorPrincipal = Colors.teal;
+  List<Pet> mascotas = [];
 
-  // =========================================================
-  // AGREGAR MASCOTA
-  // =========================================================
+  bool cargando = true;
+  bool conectado = true;
 
-  void mostrarFormularioMascota() {
-    final nombreController = TextEditingController();
-    final razaController = TextEditingController();
-    final edadController = TextEditingController();
+  DateTime? ultimaCargaLocal;
 
-    String especieSeleccionada = 'Perro';
+  StreamSubscription<List<ConnectivityResult>>?
+      _connectivitySubscription;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: const Row(
-                children: [
-                  Icon(
-                    Icons.pets,
-                    color: Colors.teal,
-                  ),
-                  SizedBox(width: 10),
-                  Text(
-                    'Agregar mascota',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nombreController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        labelText: 'Nombre',
-                        hintText: 'Ej. Max',
-                        prefixIcon: const Icon(Icons.badge),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+  @override
+  void initState() {
+    super.initState();
 
-                    const SizedBox(height: 15),
+    WidgetsBinding.instance.addObserver(this);
 
-                    DropdownButtonFormField<String>(
-                      value: especieSeleccionada,
-                      decoration: InputDecoration(
-                        labelText: 'Especie',
-                        prefixIcon: const Icon(Icons.pets),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Perro',
-                          child: Text('🐶 Perro'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Gato',
-                          child: Text('🐱 Gato'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Otro',
-                          child: Text('🐾 Otro'),
-                        ),
-                      ],
-                      onChanged: (valor) {
-                        setDialogState(() {
-                          especieSeleccionada = valor ?? 'Perro';
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: razaController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        labelText: 'Raza',
-                        hintText: 'Ej. Labrador',
-                        prefixIcon: const Icon(Icons.category),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: edadController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Edad',
-                        hintText: 'Ej. 3',
-                        suffixText: 'años',
-                        prefixIcon: const Icon(Icons.cake),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              actionsPadding: const EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                15,
-              ),
-
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Cancelar'),
-                ),
-
-                ElevatedButton(
-                  onPressed: () {
-                    final nombre =
-                        nombreController.text.trim();
-
-                    final raza =
-                        razaController.text.trim();
-
-                    final edad =
-                        edadController.text.trim();
-
-                    if (nombre.isEmpty ||
-                        raza.isEmpty ||
-                        edad.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Completa todos los campos para continuar.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    setState(() {
-                      mascotas.add({
-                        'nombre': nombre,
-                        'especie': especieSeleccionada,
-                        'raza': raza,
-                        'edad': '$edad años',
-                      });
-                    });
-
-                    Navigator.pop(context);
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '$nombre fue agregado correctamente 🐾',
-                        ),
-                        backgroundColor: Colors.teal,
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Guardar',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+    _inicializarConexion();
+    _cargarMascotas();
   }
 
-  // =========================================================
-  // ELIMINAR MASCOTA
-  // =========================================================
+  Future<void> _inicializarConexion() async {
+    try {
+      final resultado = await _connectivity.checkConnectivity();
 
-  void eliminarMascota(int index) {
-    final nombre = mascotas[index]['nombre'] ?? '';
+      if (!mounted) return;
 
-    showDialog(
+      _actualizarEstadoConexion(resultado);
+
+      _connectivitySubscription =
+          _connectivity.onConnectivityChanged.listen(
+        _actualizarEstadoConexion,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        conectado = false;
+      });
+    }
+  }
+
+  void _actualizarEstadoConexion(
+    List<ConnectivityResult> resultado,
+  ) {
+    if (!mounted) return;
+
+    final hayConexion = resultado.isNotEmpty &&
+        !resultado.contains(ConnectivityResult.none);
+
+    setState(() {
+      conectado = hayConexion;
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.resumed) {
+      _comprobarConexionAlRegresar();
+    }
+  }
+
+  Future<void> _comprobarConexionAlRegresar() async {
+    try {
+      final resultado = await _connectivity.checkConnectivity();
+
+      if (!mounted) return;
+
+      _actualizarEstadoConexion(resultado);
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        conectado = false;
+      });
+    }
+  }
+
+  Future<void> _cargarMascotas() async {
+    try {
+      final mascotasGuardadas =
+          await _databaseService.obtenerMascotas();
+
+      if (mascotasGuardadas.isEmpty) {
+        final nir = Pet(
+          id: _uuid.v4(),
+          nombre: 'NIR',
+          especie: 'Perro',
+          raza: 'Labrador',
+          edad: 3,
+          updatedAt: DateTime.now(),
+          syncStatus: 'pending',
+        );
+
+        await _databaseService.insertarMascota(nir);
+
+        await _databaseService.insertarOperacionPendiente({
+          'operation_id': _uuid.v4(),
+          'entity': 'pets',
+          'entity_id': nir.id,
+          'operation': 'create',
+          'payload': jsonEncode(nir.toMap()),
+          'created_at': DateTime.now().toIso8601String(),
+          'attempts': 0,
+          'next_attempt_at': null,
+          'status': 'pending',
+        });
+
+        mascotas = [nir];
+      } else {
+        mascotas = mascotasGuardadas;
+      }
+
+      ultimaCargaLocal = DateTime.now();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudieron cargar las mascotas: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          cargando = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _mostrarFormularioMascota() async {
+    final datos = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) {
+        return const _FormularioMascotaDialog();
+      },
+    );
+
+    if (datos == null) return;
+
+    final nuevaMascota = Pet(
+      id: _uuid.v4(),
+      nombre: datos['nombre']!,
+      especie: datos['especie']!,
+      raza: datos['raza']!,
+      edad: int.parse(datos['edad']!),
+      updatedAt: DateTime.now(),
+      syncStatus: 'pending',
+    );
+
+    try {
+      await _databaseService.insertarMascota(
+        nuevaMascota,
+      );
+
+      await _databaseService.insertarOperacionPendiente({
+        'operation_id': _uuid.v4(),
+        'entity': 'pets',
+        'entity_id': nuevaMascota.id,
+        'operation': 'create',
+        'payload': jsonEncode(
+          nuevaMascota.toMap(),
+        ),
+        'created_at': DateTime.now().toIso8601String(),
+        'attempts': 0,
+        'next_attempt_at': null,
+        'status': 'pending',
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        mascotas.add(nuevaMascota);
+
+        mascotas.sort(
+          (a, b) => a.nombre.compareTo(b.nombre),
+        );
+
+        ultimaCargaLocal = DateTime.now();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${nuevaMascota.nombre} se guardó correctamente en el dispositivo.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo guardar la mascota: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _eliminarMascota(Pet mascota) async {
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           title: const Text(
             'Eliminar mascota',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
           ),
           content: Text(
-            '¿Estás seguro de que deseas eliminar a $nombre?',
+            '¿Estás seguro de que deseas eliminar a ${mascota.nombre}?',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancelar'),
-            ),
-
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  mascotas.removeAt(index);
-                });
-
-                Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Mascota eliminada correctamente.',
-                    ),
-                  ),
+                Navigator.pop(
+                  context,
+                  false,
                 );
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
+              child: const Text(
+                'Cancelar',
               ),
-              child: const Text('Eliminar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              child: const Text(
+                'Eliminar',
+              ),
             ),
           ],
         );
       },
     );
+
+    if (confirmar != true) return;
+
+    try {
+      await _databaseService.eliminarMascota(
+        mascota.id,
+      );
+
+      await _databaseService.insertarOperacionPendiente({
+        'operation_id': _uuid.v4(),
+        'entity': 'pets',
+        'entity_id': mascota.id,
+        'operation': 'delete',
+        'payload': jsonEncode({
+          'id': mascota.id,
+        }),
+        'created_at': DateTime.now().toIso8601String(),
+        'attempts': 0,
+        'next_attempt_at': null,
+        'status': 'pending',
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        mascotas.removeWhere(
+          (item) => item.id == mascota.id,
+        );
+
+        ultimaCargaLocal = DateTime.now();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${mascota.nombre} fue eliminada.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo eliminar la mascota: $e',
+          ),
+        ),
+      );
+    }
   }
 
-  // =========================================================
-  // ABRIR DETALLE DE MASCOTA
-  // =========================================================
-
-  void abrirDetalleMascota(Map<String, String> mascota) {
-    final nombre = mascota['nombre'] ?? 'Mascota';
-    final especie = mascota['especie'] ?? 'Desconocida';
-    final raza = mascota['raza'] ?? 'Sin raza';
-
-    final edadTexto = mascota['edad'] ?? '0 años';
-
-    // Extraemos solamente el número de la edad.
-    final edadNumero =
-        int.tryParse(edadTexto.split(' ').first) ?? 0;
-
-    Navigator.push(
+  Future<void> _abrirDetalleMascota(
+    Pet mascota,
+  ) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PetDetailScreen(
-          nombre: nombre,
-          especie: especie,
-          raza: raza,
-          edad: edadNumero,
-        ),
+        builder: (context) {
+          return PetDetailScreen(
+            nombre: mascota.nombre,
+            especie: mascota.especie,
+            raza: mascota.raza,
+            edad: mascota.edad,
+          );
+        },
       ),
     );
   }
 
-  // =========================================================
-  // ICONO SEGÚN ESPECIE
-  // =========================================================
-
-  IconData obtenerIcono(String especie) {
-    if (especie == 'Gato') {
-      return Icons.pets;
+  String _textoUltimaCarga() {
+    if (ultimaCargaLocal == null) {
+      return 'Datos locales';
     }
 
-    if (especie == 'Perro') {
-      return Icons.pets;
-    }
+    final hora = TimeOfDay.fromDateTime(
+      ultimaCargaLocal!,
+    );
 
-    return Icons.pets;
+    final minuto = hora.minute.toString().padLeft(
+          2,
+          '0',
+        );
+
+    final periodo = hora.period == DayPeriod.am
+        ? 'a. m.'
+        : 'p. m.';
+
+    final hora12 = hora.hourOfPeriod == 0
+        ? 12
+        : hora.hourOfPeriod;
+
+    return 'Datos guardados localmente a las '
+        '$hora12:$minuto $periodo';
   }
 
-  // =========================================================
-  // INTERFAZ
-  // =========================================================
+  Widget _indicadorConexion() {
+    if (conectado) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          0,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0xFFA5D6A7),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(
+                color: Color(0xFFC8E6C9),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.cloud_done_outlined,
+                color: Color(0xFF2E7D32),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Conexión disponible',
+                    style: TextStyle(
+                      color: Color(0xFF2E7D32),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _textoUltimaCarga(),
+                    style: const TextStyle(
+                      color: Color(0xFF4E6B50),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        0,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFFFCC80),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFE0B2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_outlined,
+              color: Color(0xFFE65100),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sin conexión',
+                  style: TextStyle(
+                    color: Color(0xFFE65100),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Mostrando datos guardados en el dispositivo',
+                  style: TextStyle(
+                    color: Color(0xFF8D5A2B),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.storage_outlined,
+            color: Color(0xFFE65100),
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(
+      this,
+    );
+
+    _connectivitySubscription?.cancel();
+
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.teal.shade50,
-
-      // ==============================
-      // APP BAR
-      // ==============================
-
+      backgroundColor: const Color(0xFFE8F5F3),
       appBar: AppBar(
-        backgroundColor: Colors.teal,
+        backgroundColor: const Color(0xFF009688),
         foregroundColor: Colors.white,
-        centerTitle: true,
+        elevation: 0,
         title: const Text(
           'Mis mascotas',
           style: TextStyle(
@@ -348,333 +522,613 @@ class _PetsScreenState extends State<PetsScreen> {
           ),
         ),
       ),
-
-      // ==============================
-      // CUERPO
-      // ==============================
-
-      body: mascotas.isEmpty
-          ? _pantallaSinMascotas()
-          : Column(
-              children: [
-                _encabezado(),
-
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      20,
-                      5,
-                      20,
-                      100,
+      body: cargando
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : RefreshIndicator(
+              onRefresh: _cargarMascotas,
+              child: mascotas.isEmpty
+                  ? ListView(
+                      physics:
+                          const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        _indicadorConexion(),
+                        const SizedBox(height: 70),
+                        Container(
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.circular(24),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 82,
+                                height: 82,
+                                decoration:
+                                    const BoxDecoration(
+                                  color: Color(0xFFE0F2F1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.pets,
+                                  size: 42,
+                                  color: Color(0xFF009688),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Aún no tienes mascotas',
+                                textAlign:
+                                    TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Agrega tu primera mascota para comenzar a llevar el control de su información.',
+                                textAlign:
+                                    TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              FilledButton.icon(
+                                onPressed:
+                                    _mostrarFormularioMascota,
+                                icon: const Icon(
+                                  Icons.add,
+                                ),
+                                label: const Text(
+                                  'Agregar mascota',
+                                ),
+                                style:
+                                    FilledButton.styleFrom(
+                                  backgroundColor:
+                                      const Color(
+                                    0xFF009688,
+                                  ),
+                                  padding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                    horizontal: 22,
+                                    vertical: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      physics:
+                          const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        0,
+                        0,
+                        0,
+                        100,
+                      ),
+                      children: [
+                        _indicadorConexion(),
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black
+                                      .withValues(
+                                    alpha: 0.05,
+                                  ),
+                                  blurRadius: 10,
+                                  offset:
+                                      const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration:
+                                      const BoxDecoration(
+                                    color:
+                                        Color(0xFFE0F2F1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.favorite,
+                                    color:
+                                        Color(0xFF009688),
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment
+                                            .start,
+                                    children: [
+                                      const Text(
+                                        'Tus compañeros 🐾',
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight:
+                                              FontWeight
+                                                  .bold,
+                                        ),
+                                      ),
+                                      const SizedBox(
+                                        height: 4,
+                                      ),
+                                      Text(
+                                        '${mascotas.length} ${mascotas.length == 1 ? 'mascota registrada' : 'mascotas registradas'}',
+                                        style:
+                                            const TextStyle(
+                                          color:
+                                              Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...mascotas.map(
+                          (mascota) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .symmetric(
+                                horizontal: 16,
+                              ),
+                              child: _TarjetaMascota(
+                                mascota: mascota,
+                                onTap: () {
+                                  _abrirDetalleMascota(
+                                    mascota,
+                                  );
+                                },
+                                onDelete: () {
+                                  _eliminarMascota(
+                                    mascota,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                    itemCount: mascotas.length,
-                    itemBuilder: (context, index) {
-                      final mascota = mascotas[index];
-
-                      return _tarjetaMascota(
-                        mascota,
-                        index,
-                      );
-                    },
-                  ),
-                ),
-              ],
             ),
-
-      // ==============================
-      // BOTÓN AGREGAR
-      // ==============================
-
-      floatingActionButton: FloatingActionButton(
-        onPressed: mostrarFormularioMascota,
-        backgroundColor: Colors.teal,
+      floatingActionButton:
+          FloatingActionButton(
+        onPressed: _mostrarFormularioMascota,
+        backgroundColor: const Color(0xFF009688),
         foregroundColor: Colors.white,
         child: const Icon(
           Icons.add,
-          size: 30,
         ),
       ),
     );
   }
+}
 
-  // =========================================================
-  // PANTALLA SIN MASCOTAS
-  // =========================================================
+class _TarjetaMascota extends StatelessWidget {
+  final Pet mascota;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
 
-  Widget _pantallaSinMascotas() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(25),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.pets,
-                size: 70,
-                color: Colors.teal,
-              ),
-            ),
+  const _TarjetaMascota({
+    required this.mascota,
+    required this.onTap,
+    required this.onDelete,
+  });
 
-            const SizedBox(height: 25),
-
-            const Text(
-              'Aún no tienes mascotas',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.teal,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            const Text(
-              'Agrega tu primera mascota para comenzar a registrar su información de salud.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black54,
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            ElevatedButton.icon(
-              onPressed: mostrarFormularioMascota,
-              icon: const Icon(Icons.add),
-              label: const Text(
-                'Agregar mascota',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 25,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
-  // ENCABEZADO
-  // =========================================================
-
-  Widget _encabezado() {
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        10,
+      margin: const EdgeInsets.only(
+        bottom: 14,
       ),
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFF7FF),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(
+              alpha: 0.05,
+            ),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
           ),
         ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.favorite,
-              color: Colors.teal,
-              size: 28,
-            ),
-          ),
-
-          const SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Tus compañeros 🐾',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '${mascotas.length} mascota'
-                  '${mascotas.length == 1 ? '' : 's'} '
-                  'registrada'
-                  '${mascotas.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    color: Colors.black54,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================
-  // TARJETA DE MASCOTA
-  // =========================================================
-
-  Widget _tarjetaMascota(
-    Map<String, String> mascota,
-    int index,
-  ) {
-    return Card(
-      elevation: 3,
-      margin: const EdgeInsets.only(
-        bottom: 15,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
       ),
       child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(18),
-
-        // AQUÍ ABRIMOS EL DETALLE
-        onTap: () {
-          abrirDetalleMascota(mascota);
-        },
-
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(
+            14,
+            16,
+            8,
+            16,
+          ),
           child: Row(
             children: [
               Container(
-                width: 65,
-                height: 65,
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
+                width: 58,
+                height: 58,
+                decoration:
+                    const BoxDecoration(
+                  color: Color(0xFFE0F2F1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  obtenerIcono(
-                    mascota['especie'] ?? '',
-                  ),
-                  color: Colors.teal,
-                  size: 38,
+                child: const Icon(
+                  Icons.pets,
+                  color: Color(0xFF009688),
+                  size: 32,
                 ),
               ),
-
-              const SizedBox(width: 16),
-
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     Text(
-                      mascota['nombre'] ?? '',
+                      mascota.nombre,
                       style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
-
-                    const SizedBox(height: 5),
-
-                    Text(
-                      '${mascota['especie']} • '
-                      '${mascota['raza']}',
-                      style: const TextStyle(
-                        color: Colors.black54,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-
                     const SizedBox(height: 4),
-
                     Text(
-                      'Edad: ${mascota['edad']}',
+                      '${mascota.especie} • ${mascota.raza}',
                       style: const TextStyle(
                         color: Colors.black54,
-                        fontSize: 14,
                       ),
                     ),
-
-                    const SizedBox(height: 5),
-
+                    const SizedBox(height: 3),
+                    Text(
+                      'Edad: ${mascota.edad} ${mascota.edad == 1 ? 'año' : 'años'}',
+                      style: const TextStyle(
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
                       'Toca para ver su ficha →',
                       style: TextStyle(
-                        color: Colors.teal,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF009688),
+                        fontWeight:
+                            FontWeight.w600,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // MENÚ ELIMINAR
               PopupMenuButton<String>(
-                onSelected: (opcion) {
-                  if (opcion == 'eliminar') {
-                    eliminarMascota(index);
+                onSelected: (value) {
+                  if (value == 'eliminar') {
+                    onDelete();
                   }
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'eliminar',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete,
-                          color: Colors.red,
-                        ),
-                        SizedBox(width: 10),
-                        Text('Eliminar'),
-                      ],
+                itemBuilder: (context) {
+                  return const [
+                    PopupMenuItem(
+                      value: 'eliminar',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons
+                                .delete_outline,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Eliminar',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ];
+                },
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FormularioMascotaDialog
+    extends StatefulWidget {
+  const _FormularioMascotaDialog();
+
+  @override
+  State<_FormularioMascotaDialog>
+      createState() =>
+          _FormularioMascotaDialogState();
+}
+
+class _FormularioMascotaDialogState
+    extends State<_FormularioMascotaDialog> {
+  final _formKey =
+      GlobalKey<FormState>();
+
+  late final TextEditingController
+      _nombreController;
+
+  late final TextEditingController
+      _razaController;
+
+  late final TextEditingController
+      _edadController;
+
+  String _especie = 'Perro';
+
+  @override
+  void initState() {
+    super.initState();
+
+    _nombreController =
+        TextEditingController();
+
+    _razaController =
+        TextEditingController();
+
+    _edadController =
+        TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _razaController.dispose();
+    _edadController.dispose();
+
+    super.dispose();
+  }
+
+  void _guardar() {
+    if (!_formKey.currentState!
+        .validate()) {
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      {
+        'nombre':
+            _nombreController.text.trim(),
+        'especie': _especie,
+        'raza':
+            _razaController.text.trim(),
+        'edad':
+            _edadController.text.trim(),
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        'Agregar mascota',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content:
+          SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller:
+                    _nombreController,
+                textCapitalization:
+                    TextCapitalization.words,
+                decoration:
+                    const InputDecoration(
+                  labelText: 'Nombre',
+                  prefixIcon:
+                      Icon(Icons.pets),
+                  border:
+                      OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Ingresa el nombre';
+                  }
+
+                  if (value.trim().length <
+                      2) {
+                    return 'El nombre es demasiado corto';
+                  }
+
+                  return null;
+                },
+              ),
+              const SizedBox(
+                height: 14,
+              ),
+              DropdownButtonFormField<
+                  String>(
+                initialValue:
+                    _especie,
+                decoration:
+                    const InputDecoration(
+                  labelText: 'Especie',
+                  prefixIcon: Icon(
+                    Icons
+                        .category_outlined,
+                  ),
+                  border:
+                      OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Perro',
+                    child:
+                        Text('Perro'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Gato',
+                    child:
+                        Text('Gato'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Otro',
+                    child:
+                        Text('Otro'),
+                  ),
+                ],
+                onChanged:
+                    (value) {
+                  if (value == null) {
+                    return;
+                  }
+
+                  setState(() {
+                    _especie =
+                        value;
+                  });
+                },
+              ),
+              const SizedBox(
+                height: 14,
+              ),
+              TextFormField(
+                controller:
+                    _razaController,
+                textCapitalization:
+                    TextCapitalization.words,
+                decoration:
+                    const InputDecoration(
+                  labelText: 'Raza',
+                  prefixIcon: Icon(
+                    Icons
+                        .info_outline,
+                  ),
+                  border:
+                      OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Ingresa la raza';
+                  }
+
+                  return null;
+                },
+              ),
+              const SizedBox(
+                height: 14,
+              ),
+              TextFormField(
+                controller:
+                    _edadController,
+                keyboardType:
+                    TextInputType.number,
+                decoration:
+                    const InputDecoration(
+                  labelText: 'Edad',
+                  prefixIcon: Icon(
+                    Icons.cake_outlined,
+                  ),
+                  suffixText: 'años',
+                  border:
+                      OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'Ingresa la edad';
+                  }
+
+                  final edad =
+                      int.tryParse(
+                    value.trim(),
+                  );
+
+                  if (edad == null) {
+                    return 'Ingresa un número válido';
+                  }
+
+                  if (edad < 0 ||
+                      edad > 100) {
+                    return 'La edad debe estar entre 0 y 100';
+                  }
+
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(
+              context,
+            );
+          },
+          child: const Text(
+            'Cancelar',
+          ),
+        ),
+        FilledButton(
+          onPressed: _guardar,
+          style:
+              FilledButton.styleFrom(
+            backgroundColor:
+                const Color(
+              0xFF009688,
+            ),
+          ),
+          child: const Text(
+            'Guardar',
+          ),
+        ),
+      ],
     );
   }
 }

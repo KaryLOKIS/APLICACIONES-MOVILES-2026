@@ -1,8 +1,90 @@
 import 'package:flutter/material.dart';
+
+import '../services/database_service.dart';
+import '../services/secure_storage_service.dart';
+import 'login_screen.dart';
 import 'pets_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  Future<void> _cerrarSesion(BuildContext context) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Cerrar sesión',
+          ),
+          content: const Text(
+            'Al cerrar sesión se eliminarán los datos almacenados '
+            'localmente en este dispositivo. ¿Deseas continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text(
+                'Cerrar sesión',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) {
+      return;
+    }
+
+    try {
+      // Eliminar el token de sesión seguro.
+      await SecureStorageService.instance.eliminarSesion();
+
+      // Eliminar completamente la base de datos local.
+      await DatabaseService.instance.eliminarBaseDatos();
+
+      if (!context.mounted) {
+        return;
+      }
+
+      // Regresar al Login y eliminar las pantallas anteriores
+      // de la pila de navegación.
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const LoginScreen(),
+        ),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo cerrar la sesión: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +104,18 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         centerTitle: true,
+
+        actions: [
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            icon: const Icon(
+              Icons.logout,
+            ),
+            onPressed: () {
+              _cerrarSesion(context);
+            },
+          ),
+        ],
       ),
 
       // =====================================================

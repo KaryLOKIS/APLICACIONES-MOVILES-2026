@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/database_service.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -22,8 +24,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
+  final DatabaseService _databaseService =
+      DatabaseService.instance;
+
   bool _mostrarPassword = false;
   bool _mostrarConfirmPassword = false;
+  bool _creandoCuenta = false;
 
   @override
   void dispose() {
@@ -34,8 +40,65 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _crearCuenta() {
-    if (_formKey.currentState!.validate()) {
+  // =========================================================
+  // CREAR CUENTA
+  // =========================================================
+
+  Future<void> _crearCuenta() async {
+    // ---------------------------------------------------------
+    // VALIDAR FORMULARIO
+    // ---------------------------------------------------------
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _creandoCuenta = true;
+    });
+
+    try {
+      final nombre = _nombreController.text.trim();
+      final correo = _correoController.text.trim().toLowerCase();
+      final password = _passwordController.text;
+
+      // -------------------------------------------------------
+      // REGISTRAR USUARIO EN SQLITE
+      // -------------------------------------------------------
+
+      final registrado =
+          await _databaseService.registrarUsuario(
+        nombre: nombre,
+        correo: correo,
+        password: password,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      // -------------------------------------------------------
+      // CORREO YA REGISTRADO
+      // -------------------------------------------------------
+
+      if (!registrado) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Este correo ya está registrado. '
+              'Utiliza otro correo.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------------
+      // REGISTRO CORRECTO
+      // -------------------------------------------------------
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -45,11 +108,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       );
 
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      });
+      // -------------------------------------------------------
+      // REGRESAR AL LOGIN
+      // -------------------------------------------------------
+
+      await Future.delayed(
+        const Duration(milliseconds: 1200),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo crear la cuenta: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creandoCuenta = false;
+        });
+      }
     }
   }
 
@@ -79,10 +169,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
             child: Column(
               children: [
-
                 const SizedBox(height: 20),
 
+                // =================================================
                 // ICONO
+                // =================================================
+
                 const Icon(
                   Icons.pets,
                   size: 100,
@@ -91,7 +183,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
+                // =================================================
                 // TÍTULO
+                // =================================================
+
                 const Text(
                   'Crear una cuenta',
                   textAlign: TextAlign.center,
@@ -104,7 +199,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 12),
 
+                // =================================================
                 // DESCRIPCIÓN
+                // =================================================
+
                 const Text(
                   'Regístrate para comenzar a cuidar la salud de tu mascota',
                   textAlign: TextAlign.center,
@@ -116,7 +214,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 35),
 
+                // =================================================
                 // NOMBRE
+                // =================================================
+
                 TextFormField(
                   controller: _nombreController,
                   keyboardType: TextInputType.name,
@@ -133,7 +234,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
 
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
+                    if (value == null ||
+                        value.trim().isEmpty) {
                       return 'Ingresa tu nombre completo';
                     }
 
@@ -147,7 +249,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
+                // =================================================
                 // CORREO
+                // =================================================
+
                 TextFormField(
                   controller: _correoController,
                   keyboardType: TextInputType.emailAddress,
@@ -164,7 +269,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
 
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
+                    if (value == null ||
+                        value.trim().isEmpty) {
                       return 'Ingresa tu correo electrónico';
                     }
 
@@ -172,7 +278,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                     );
 
-                    if (!emailRegex.hasMatch(value.trim())) {
+                    if (!emailRegex.hasMatch(
+                      value.trim(),
+                    )) {
                       return 'Ingresa un correo electrónico válido';
                     }
 
@@ -182,7 +290,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
+                // =================================================
                 // CONTRASEÑA
+                // =================================================
+
                 TextFormField(
                   controller: _passwordController,
                   obscureText: !_mostrarPassword,
@@ -200,7 +311,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       onPressed: () {
                         setState(() {
-                          _mostrarPassword = !_mostrarPassword;
+                          _mostrarPassword =
+                              !_mostrarPassword;
                         });
                       },
                     ),
@@ -228,7 +340,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
+                // =================================================
                 // CONFIRMAR CONTRASEÑA
+                // =================================================
+
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: !_mostrarConfirmPassword,
@@ -275,38 +390,61 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 30),
 
+                // =================================================
                 // BOTÓN CREAR CUENTA
+                // =================================================
+
                 SizedBox(
                   width: double.infinity,
                   height: 55,
 
                   child: ElevatedButton(
-                    onPressed: _crearCuenta,
+                    onPressed:
+                        _creandoCuenta ? null : _crearCuenta,
 
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                       foregroundColor: Colors.white,
+
+                      disabledBackgroundColor:
+                          Colors.teal.shade200,
 
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15),
                       ),
                     ),
 
-                    child: const Text(
-                      'Crear cuenta',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _creandoCuenta
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text(
+                            'Crear cuenta',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 25),
 
+                // =================================================
                 // VOLVER A INICIAR SESIÓN
+                // =================================================
+
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
 
                   children: [
                     const Text(
@@ -317,9 +455,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
 
                     TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: _creandoCuenta
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                            },
 
                       child: const Text(
                         'Iniciar sesión',
