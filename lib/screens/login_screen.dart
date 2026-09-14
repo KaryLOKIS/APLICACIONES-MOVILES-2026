@@ -1,7 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 
-import '../services/database_service.dart';
+import '../config/api_config.dart';
+import '../services/api_client.dart';
 import '../services/secure_storage_service.dart';
 import 'home_screen.dart';
 
@@ -19,13 +20,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController =
       TextEditingController();
 
-  final DatabaseService _databaseService =
-      DatabaseService.instance;
-
   final SecureStorageService _secureStorage =
       SecureStorageService.instance;
 
-  final Uuid _uuid = const Uuid();
+  final Dio _dio = ApiClient.instance.dio;
 
   bool ocultarPassword = true;
   bool iniciandoSesion = false;
@@ -62,42 +60,41 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final usuario = await _databaseService.validarCredenciales(
-        correo: correo,
-        password: password,
+      final response = await _dio.post(
+        ApiConfig.loginEndpoint,
+        data: {
+          'email': correo,
+          'password': password,
+        },
       );
 
-      if (!mounted) {
-        return;
-      }
+      final data = response.data;
 
-      if (usuario == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Correo o contraseña incorrectos.',
-            ),
-            backgroundColor: Colors.red,
-          ),
+      if (data is! Map) {
+        throw Exception(
+          'El servidor devolvió una respuesta inválida.',
         );
-
-        return;
       }
 
-      /*
-       * La autenticación local fue correcta.
-       *
-       * Como todavía no tenemos un backend,
-       * generamos un identificador único de sesión
-       * y lo almacenamos mediante flutter_secure_storage.
-       *
-       * En una versión conectada a una API,
-       * aquí se almacenaría el token entregado por el servidor.
-       */
-      final tokenSesion = _uuid.v4();
+      final accessToken =
+          data['access_token'] as String?;
 
-      await _secureStorage.guardarTokenSesion(
-        tokenSesion,
+      final refreshToken =
+          data['refresh_token'] as String?;
+
+      if (accessToken == null ||
+          accessToken.isEmpty ||
+          refreshToken == null ||
+          refreshToken.isEmpty) {
+        throw Exception(
+          'El servidor no devolvió los tokens de sesión.',
+        );
+      }
+
+      // Guardamos ambos tokens en almacenamiento seguro.
+      await _secureStorage.guardarTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
       );
 
       if (!mounted) {
@@ -127,6 +124,49 @@ class _LoginScreenState extends State<LoginScreen> {
           builder: (context) => const HomeScreen(),
         ),
       );
+    } on DioException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      String mensaje =
+          'No se pudo conectar con el servidor.';
+
+      final statusCode = e.response?.statusCode;
+      final responseData = e.response?.data;
+
+      if (statusCode == 401) {
+        mensaje =
+            'Correo o contraseña incorrectos.';
+      } else if (statusCode == 422) {
+        mensaje =
+            _obtenerMensajeValidacion(responseData);
+      } else if (e.type ==
+          DioExceptionType.connectionTimeout) {
+        mensaje =
+            'Tiempo de conexión agotado. Verifica el servidor.';
+      } else if (e.type ==
+          DioExceptionType.receiveTimeout) {
+        mensaje =
+            'El servidor tardó demasiado en responder.';
+      } else if (e.type ==
+          DioExceptionType.connectionError) {
+        mensaje =
+            'No hay conexión con el servidor. '
+            'Verifica que el backend esté ejecutándose.';
+      } else if (statusCode != null &&
+          statusCode >= 500) {
+        mensaje =
+            'El servidor presentó un error. '
+            'Intenta nuevamente.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mensaje),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
       if (!mounted) {
         return;
@@ -149,11 +189,48 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  String _obtenerMensajeValidacion(dynamic data) {
+    if (data is Map) {
+      final errores = data['errores'];
+
+      if (errores is List && errores.isNotEmpty) {
+        final primerError = errores.first;
+
+        if (primerError is Map) {
+          final mensaje =
+              primerError['msg'] ??
+              primerError['message'] ??
+              primerError['mensaje'];
+
+          if (mensaje is String &&
+              mensaje.isNotEmpty) {
+            return mensaje;
+          }
+        }
+
+        if (primerError is String &&
+            primerError.isNotEmpty) {
+          return primerError;
+        }
+      }
+
+      final mensaje =
+          data['mensaje'] ??
+          data['message'] ??
+          data['error'];
+
+      if (mensaje is String && mensaje.isNotEmpty) {
+        return mensaje;
+      }
+    }
+
+    return 'Revisa los datos ingresados.';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.teal.shade50,
-
       appBar: AppBar(
         title: const Text(
           'Iniciar sesión',
@@ -161,10 +238,8 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(25),
-
         child: Column(
           children: [
             const SizedBox(height: 35),
@@ -201,8 +276,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
             TextField(
               controller: correoController,
-              keyboardType: TextInputType.emailAddress,
-
+              keyboardType:
+                  TextInputType.emailAddress,
               decoration: InputDecoration(
                 labelText: 'Correo electrónico',
                 hintText: 'ejemplo@correo.com',
@@ -212,7 +287,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
               ),
             ),
@@ -222,21 +298,17 @@ class _LoginScreenState extends State<LoginScreen> {
             TextField(
               controller: passwordController,
               obscureText: ocultarPassword,
-
               decoration: InputDecoration(
                 labelText: 'Contraseña',
-
                 prefixIcon: const Icon(
                   Icons.lock,
                 ),
-
                 suffixIcon: IconButton(
                   icon: Icon(
                     ocultarPassword
                         ? Icons.visibility
                         : Icons.visibility_off,
                   ),
-
                   onPressed: () {
                     setState(() {
                       ocultarPassword =
@@ -244,12 +316,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     });
                   },
                 ),
-
                 filled: true,
                 fillColor: Colors.white,
-
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
               ),
             ),
@@ -258,10 +329,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
             Align(
               alignment: Alignment.centerRight,
-
               child: TextButton(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(
                     const SnackBar(
                       content: Text(
                         'La recuperación de contraseña estará disponible próximamente.',
@@ -269,7 +340,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 },
-
                 child: const Text(
                   '¿Olvidaste tu contraseña?',
                 ),
@@ -281,35 +351,27 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(
               width: double.infinity,
               height: 52,
-
               child: ElevatedButton(
-                onPressed:
-                    iniciandoSesion
-                        ? null
-                        : iniciarSesion,
-
+                onPressed: iniciandoSesion
+                    ? null
+                    : iniciarSesion,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal,
                   foregroundColor: Colors.white,
-
                   disabledBackgroundColor:
                       Colors.teal.shade200,
-
                   shape: RoundedRectangleBorder(
                     borderRadius:
                         BorderRadius.circular(12),
                   ),
                 ),
-
                 child: iniciandoSesion
                     ? const SizedBox(
                         width: 24,
                         height: 24,
-
                         child:
                             CircularProgressIndicator(
                           strokeWidth: 2.5,
-
                           valueColor:
                               AlwaysStoppedAnimation<
                                   Color>(
@@ -333,17 +395,14 @@ class _LoginScreenState extends State<LoginScreen> {
             Row(
               mainAxisAlignment:
                   MainAxisAlignment.center,
-
               children: [
                 const Text(
                   '¿No tienes una cuenta?',
                 ),
-
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
                   },
-
                   child: const Text(
                     'Registrarse',
                   ),

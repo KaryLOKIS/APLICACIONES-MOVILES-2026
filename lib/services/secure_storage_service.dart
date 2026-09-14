@@ -7,7 +7,16 @@ class SecureStorageService {
   static final SecureStorageService instance =
       SecureStorageService._privateConstructor();
 
-  static const String _sessionTokenKey = 'session_token';
+  // =========================================================
+  // CLAVES DE ALMACENAMIENTO
+  // =========================================================
+
+  static const String _accessTokenKey = 'access_token';
+  static const String _refreshTokenKey = 'refresh_token';
+
+  // =========================================================
+  // ALMACENAMIENTO SEGURO
+  // =========================================================
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -17,61 +26,181 @@ class SecureStorageService {
     ),
   );
 
-  Future<void> guardarTokenSesion(String token) async {
+  // =========================================================
+  // GUARDAR ACCESS TOKEN
+  // =========================================================
+
+  Future<void> guardarAccessToken(
+    String token,
+  ) async {
     try {
       await _storage.write(
-        key: _sessionTokenKey,
+        key: _accessTokenKey,
         value: token,
       );
 
-      debugPrint('PETCARE: TOKEN GUARDADO CORRECTAMENTE');
+      debugPrint(
+        'PETCARE: ACCESS TOKEN GUARDADO CORRECTAMENTE',
+      );
     } catch (e) {
-      debugPrint('PETCARE: ERROR AL GUARDAR TOKEN: $e');
+      debugPrint(
+        'PETCARE: ERROR AL GUARDAR ACCESS TOKEN: $e',
+      );
       rethrow;
     }
   }
 
-  Future<String?> obtenerTokenSesion() async {
+  // =========================================================
+  // OBTENER ACCESS TOKEN
+  // =========================================================
+
+  Future<String?> obtenerAccessToken() async {
     try {
       final token = await _storage.read(
-        key: _sessionTokenKey,
+        key: _accessTokenKey,
       );
 
       debugPrint(
-        'PETCARE: TOKEN LEIDO: ${token != null && token.isNotEmpty}',
+        'PETCARE: ACCESS TOKEN LEIDO: '
+        '${token != null && token.isNotEmpty}',
       );
 
       return token;
     } catch (e) {
-      debugPrint('PETCARE: ERROR AL LEER TOKEN: $e');
+      debugPrint(
+        'PETCARE: ERROR AL LEER ACCESS TOKEN: $e',
+      );
       rethrow;
     }
   }
+
+  // =========================================================
+  // GUARDAR REFRESH TOKEN
+  // =========================================================
+
+  Future<void> guardarRefreshToken(
+    String token,
+  ) async {
+    try {
+      await _storage.write(
+        key: _refreshTokenKey,
+        value: token,
+      );
+
+      debugPrint(
+        'PETCARE: REFRESH TOKEN GUARDADO CORRECTAMENTE',
+      );
+    } catch (e) {
+      debugPrint(
+        'PETCARE: ERROR AL GUARDAR REFRESH TOKEN: $e',
+      );
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // OBTENER REFRESH TOKEN
+  // =========================================================
+
+  Future<String?> obtenerRefreshToken() async {
+    try {
+      final token = await _storage.read(
+        key: _refreshTokenKey,
+      );
+
+      debugPrint(
+        'PETCARE: REFRESH TOKEN LEIDO: '
+        '${token != null && token.isNotEmpty}',
+      );
+
+      return token;
+    } catch (e) {
+      debugPrint(
+        'PETCARE: ERROR AL LEER REFRESH TOKEN: $e',
+      );
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // GUARDAR TOKENS DE SESION
+  // =========================================================
+
+  Future<void> guardarTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    try {
+      await _storage.write(
+        key: _accessTokenKey,
+        value: accessToken,
+      );
+
+      await _storage.write(
+        key: _refreshTokenKey,
+        value: refreshToken,
+      );
+
+      debugPrint(
+        'PETCARE: TOKENS DE SESION GUARDADOS CORRECTAMENTE',
+      );
+    } catch (e) {
+      debugPrint(
+        'PETCARE: ERROR AL GUARDAR TOKENS: $e',
+      );
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // COMPROBAR SI EXISTE SESION
+  // =========================================================
 
   Future<bool> existeSesion() async {
     try {
-      final token = await obtenerTokenSesion();
+      final accessToken = await obtenerAccessToken();
+      final refreshToken = await obtenerRefreshToken();
 
-      final existe = token != null && token.isNotEmpty;
+      final existe =
+          accessToken != null &&
+          accessToken.isNotEmpty &&
+          refreshToken != null &&
+          refreshToken.isNotEmpty;
 
-      debugPrint('PETCARE: EXISTE SESION: $existe');
+      debugPrint(
+        'PETCARE: EXISTE SESION: $existe',
+      );
 
       return existe;
     } catch (e) {
-      debugPrint('PETCARE: ERROR COMPROBANDO SESION: $e');
+      debugPrint(
+        'PETCARE: ERROR COMPROBANDO SESION: $e',
+      );
       rethrow;
     }
   }
+
+  // =========================================================
+  // ELIMINAR SESION COMPLETA
+  // =========================================================
 
   Future<void> eliminarSesion() async {
     try {
       await _storage.delete(
-        key: _sessionTokenKey,
+        key: _accessTokenKey,
       );
 
-      debugPrint('PETCARE: SESION ELIMINADA');
+      await _storage.delete(
+        key: _refreshTokenKey,
+      );
+
+      debugPrint(
+        'PETCARE: ACCESS Y REFRESH TOKENS ELIMINADOS',
+      );
     } catch (e) {
-      debugPrint('PETCARE: ERROR AL ELIMINAR SESION: $e');
+      debugPrint(
+        'PETCARE: ERROR AL ELIMINAR SESION: $e',
+      );
       rethrow;
     }
   }
