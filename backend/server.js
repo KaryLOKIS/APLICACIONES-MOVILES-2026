@@ -113,7 +113,8 @@ function dbAll(sql, params = []) {
 // ==========================================
 
 db.serialize(() => {
-  db.run(`
+  db.run(
+    `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       nombre TEXT NOT NULL,
@@ -121,18 +122,21 @@ db.serialize(() => {
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
-  `, (error) => {
-    if (error) {
-      console.error(
-        'PETCARE ERROR creando users:',
-        error.message
-      );
-    } else {
-      console.log('PETCARE: Tabla users lista');
+    `,
+    (error) => {
+      if (error) {
+        console.error(
+          'PETCARE ERROR creando users:',
+          error.message
+        );
+      } else {
+        console.log('PETCARE: Tabla users lista');
+      }
     }
-  });
+  );
 
-  db.run(`
+  db.run(
+    `
     CREATE TABLE IF NOT EXISTS pets (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -143,16 +147,18 @@ db.serialize(() => {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
-  `, (error) => {
-    if (error) {
-      console.error(
-        'PETCARE ERROR creando pets:',
-        error.message
-      );
-    } else {
-      console.log('PETCARE: Tabla pets lista');
+    `,
+    (error) => {
+      if (error) {
+        console.error(
+          'PETCARE ERROR creando pets:',
+          error.message
+        );
+      } else {
+        console.log('PETCARE: Tabla pets lista');
+      }
     }
-  });
+  );
 });
 
 // ==========================================
@@ -539,14 +545,16 @@ app.post(
       } catch (error) {
         return res.status(401).json({
           error: 'REFRESH_TOKEN_INVALID',
-          mensaje: 'El refresh token no es válido o ha expirado.',
+          mensaje:
+            'El refresh token no es válido o ha expirado.',
         });
       }
 
       if (payload.type !== 'refresh') {
         return res.status(401).json({
           error: 'REFRESH_TOKEN_INVALID',
-          mensaje: 'El token enviado no es un refresh token.',
+          mensaje:
+            'El token enviado no es un refresh token.',
         });
       }
 
@@ -593,7 +601,8 @@ app.post(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible renovar el token.',
+        mensaje:
+          'No fue posible renovar el token.',
       });
     }
   }
@@ -639,7 +648,8 @@ app.get(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible obtener el usuario.',
+        mensaje:
+          'No fue posible obtener el usuario.',
       });
     }
   }
@@ -682,7 +692,8 @@ app.get(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible obtener las mascotas.',
+        mensaje:
+          'No fue posible obtener las mascotas.',
       });
     }
   }
@@ -691,6 +702,13 @@ app.get(
 // ==========================================
 // CREAR MASCOTA
 // ==========================================
+//
+// IMPORTANTE:
+// El cliente puede enviar un UUID propio.
+// Esto permite que una creación offline sea
+// idempotente y pueda reintentarse sin crear
+// duplicados.
+//
 
 app.post(
   '/api/pets',
@@ -698,10 +716,20 @@ app.post(
   autenticarToken,
 
   [
+    body('id')
+      .optional()
+      .trim()
+      .isUUID()
+      .withMessage(
+        'El identificador de la mascota debe ser un UUID válido.'
+      ),
+
     body('nombre')
       .trim()
       .notEmpty()
-      .withMessage('El nombre de la mascota es obligatorio.')
+      .withMessage(
+        'El nombre de la mascota es obligatorio.'
+      )
       .isLength({ max: 100 })
       .withMessage(
         'El nombre de la mascota no puede superar 100 caracteres.'
@@ -710,12 +738,16 @@ app.post(
     body('especie')
       .trim()
       .notEmpty()
-      .withMessage('La especie es obligatoria.'),
+      .withMessage(
+        'La especie es obligatoria.'
+      ),
 
     body('raza')
       .trim()
       .notEmpty()
-      .withMessage('La raza es obligatoria.'),
+      .withMessage(
+        'La raza es obligatoria.'
+      ),
 
     body('edad')
       .isInt({ min: 0, max: 100 })
@@ -729,14 +761,67 @@ app.post(
   async (req, res) => {
     try {
       const {
+        id,
         nombre,
         especie,
         raza,
         edad,
       } = req.body;
 
-      const petId = uuidv4();
-      const updatedAt = new Date().toISOString();
+      // ------------------------------------------
+      // USAR ID DEL CLIENTE O GENERAR UNO
+      // ------------------------------------------
+
+      const petId = id || uuidv4();
+
+      const updatedAt =
+        new Date().toISOString();
+
+      // ------------------------------------------
+      // COMPROBAR SI YA EXISTE
+      // ------------------------------------------
+      //
+      // Si existe con el mismo usuario e ID,
+      // significa que probablemente estamos
+      // procesando nuevamente una operación
+      // offline ya aplicada.
+      //
+
+      const mascotaExistente = await dbGet(
+        `
+        SELECT
+          id,
+          nombre,
+          especie,
+          raza,
+          edad,
+          updated_at
+        FROM pets
+        WHERE id = ?
+        AND user_id = ?
+        `,
+        [
+          petId,
+          req.user.id,
+        ]
+      );
+
+      if (mascotaExistente) {
+        console.log(
+          `PETCARE: Operación CREATE repetida detectada para mascota ${petId}`
+        );
+
+        return res.status(200).json({
+          mensaje:
+            'La mascota ya existía. Operación considerada idempotente.',
+          datos: mascotaExistente,
+          idempotente: true,
+        });
+      }
+
+      // ------------------------------------------
+      // INSERTAR MASCOTA
+      // ------------------------------------------
 
       await dbRun(
         `
@@ -773,19 +858,63 @@ app.post(
           updated_at
         FROM pets
         WHERE id = ?
+        AND user_id = ?
         `,
-        [petId]
+        [
+          petId,
+          req.user.id,
+        ]
       );
 
       console.log(
-        `PETCARE: Mascota creada ${nombre}`
+        `PETCARE: Mascota creada ${nombre} (${petId})`
       );
 
       return res.status(201).json({
-        mensaje: 'Mascota creada correctamente.',
+        mensaje:
+          'Mascota creada correctamente.',
         datos: pet,
+        idempotente: false,
       });
     } catch (error) {
+      // ------------------------------------------
+      // POSIBLE DUPLICADO POR CONCURRENCIA
+      // ------------------------------------------
+
+      if (
+        error &&
+        error.code === 'SQLITE_CONSTRAINT'
+      ) {
+        const mascotaExistente =
+          await dbGet(
+            `
+            SELECT
+              id,
+              nombre,
+              especie,
+              raza,
+              edad,
+              updated_at
+            FROM pets
+            WHERE id = ?
+            AND user_id = ?
+            `,
+            [
+              req.body.id,
+              req.user.id,
+            ]
+          );
+
+        if (mascotaExistente) {
+          return res.status(200).json({
+            mensaje:
+              'La mascota ya existía. Operación considerada idempotente.',
+            datos: mascotaExistente,
+            idempotente: true,
+          });
+        }
+      }
+
       console.error(
         'PETCARE ERROR POST /api/pets:',
         error.message
@@ -793,7 +922,8 @@ app.post(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible crear la mascota.',
+        mensaje:
+          'No fue posible crear la mascota.',
       });
     }
   }
@@ -828,7 +958,8 @@ app.delete(
       }
 
       return res.json({
-        mensaje: 'Mascota eliminada correctamente.',
+        mensaje:
+          'Mascota eliminada correctamente.',
       });
     } catch (error) {
       console.error(
@@ -838,7 +969,8 @@ app.delete(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible eliminar la mascota.',
+        mensaje:
+          'No fue posible eliminar la mascota.',
       });
     }
   }
@@ -856,7 +988,8 @@ app.use((error, req, res, next) => {
 
   res.status(500).json({
     error: 'SERVER_ERROR',
-    mensaje: 'Ocurrió un error inesperado.',
+    mensaje:
+      'Ocurrió un error inesperado.',
   });
 });
 
@@ -868,24 +1001,46 @@ app.listen(
   PORT,
   '0.0.0.0',
   () => {
-    console.log('==========================================');
-    console.log('      PETCARE BACKEND INICIADO');
-    console.log('==========================================');
+    console.log(
+      '=========================================='
+    );
+    console.log(
+      '      PETCARE BACKEND INICIADO'
+    );
+    console.log(
+      '=========================================='
+    );
+
     console.log(
       `Servidor ejecutándose en el puerto ${PORT}`
     );
+
     console.log(
       'URL local: http://localhost:3000'
     );
+
     console.log(
       'URL Android Emulator: http://10.0.2.2:3000'
     );
+
     console.log(
       `Access token: ${ACCESS_TOKEN_MINUTES} minutos`
     );
+
     console.log(
       `Refresh token: ${REFRESH_TOKEN_DAYS} días`
     );
-    console.log('==========================================');
+
+    console.log(
+      'Creación de mascotas: ID del cliente soportado'
+    );
+
+    console.log(
+      'Reintentos CREATE: idempotencia por UUID'
+    );
+
+    console.log(
+      '=========================================='
+    );
   }
 );

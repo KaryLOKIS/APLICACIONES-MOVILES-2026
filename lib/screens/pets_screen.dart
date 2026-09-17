@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/pet.dart';
-import '../services/database_service.dart';
+import '../repositories/pet_repository.dart';
 import 'pet_detail_screen.dart';
 
 class PetsScreen extends StatefulWidget {
@@ -18,19 +17,26 @@ class PetsScreen extends StatefulWidget {
 
 class _PetsScreenState extends State<PetsScreen>
     with WidgetsBindingObserver {
-  final DatabaseService _databaseService = DatabaseService.instance;
+  final PetRepository _repository = PetRepository();
+
   final Uuid _uuid = const Uuid();
+
   final Connectivity _connectivity = Connectivity();
 
   List<Pet> mascotas = [];
 
   bool cargando = true;
   bool conectado = true;
+  bool sincronizando = false;
 
   DateTime? ultimaCargaLocal;
 
   StreamSubscription<List<ConnectivityResult>>?
       _connectivitySubscription;
+
+  // =========================================================
+  // INICIALIZAR
+  // =========================================================
 
   @override
   void initState() {
@@ -39,12 +45,20 @@ class _PetsScreenState extends State<PetsScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _inicializarConexion();
+
+    _repository.iniciarSincronizacionAutomatica();
+
     _cargarMascotas();
   }
 
+  // =========================================================
+  // INICIALIZAR CONEXIÓN
+  // =========================================================
+
   Future<void> _inicializarConexion() async {
     try {
-      final resultado = await _connectivity.checkConnectivity();
+      final resultado =
+          await _connectivity.checkConnectivity();
 
       if (!mounted) return;
 
@@ -54,7 +68,7 @@ class _PetsScreenState extends State<PetsScreen>
           _connectivity.onConnectivityChanged.listen(
         _actualizarEstadoConexion,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -63,18 +77,39 @@ class _PetsScreenState extends State<PetsScreen>
     }
   }
 
+  // =========================================================
+  // ACTUALIZAR ESTADO DE CONEXIÓN
+  // =========================================================
+
   void _actualizarEstadoConexion(
     List<ConnectivityResult> resultado,
   ) {
     if (!mounted) return;
 
-    final hayConexion = resultado.isNotEmpty &&
-        !resultado.contains(ConnectivityResult.none);
+    final hayConexion =
+        resultado.isNotEmpty &&
+        !resultado.contains(
+          ConnectivityResult.none,
+        );
+
+    final estabaDesconectado = !conectado;
 
     setState(() {
       conectado = hayConexion;
     });
+
+    // ---------------------------------------------------------
+    // SI VOLVIÓ INTERNET, CARGAR Y SINCRONIZAR
+    // ---------------------------------------------------------
+
+    if (hayConexion && estabaDesconectado) {
+      _sincronizarYRecargar();
+    }
   }
+
+  // =========================================================
+  // CICLO DE VIDA
+  // =========================================================
 
   @override
   void didChangeAppLifecycleState(
@@ -85,9 +120,14 @@ class _PetsScreenState extends State<PetsScreen>
     }
   }
 
+  // =========================================================
+  // COMPROBAR CONEXIÓN AL REGRESAR
+  // =========================================================
+
   Future<void> _comprobarConexionAlRegresar() async {
     try {
-      final resultado = await _connectivity.checkConnectivity();
+      final resultado =
+          await _connectivity.checkConnectivity();
 
       if (!mounted) return;
 
@@ -101,42 +141,33 @@ class _PetsScreenState extends State<PetsScreen>
     }
   }
 
-  Future<void> _cargarMascotas() async {
-    try {
-      final mascotasGuardadas =
-          await _databaseService.obtenerMascotas();
+  // =========================================================
+  // CARGAR MASCOTAS
+  // =========================================================
 
-      if (mascotasGuardadas.isEmpty) {
-        final nir = Pet(
-          id: _uuid.v4(),
-          nombre: 'NIR',
-          especie: 'Perro',
-          raza: 'Labrador',
-          edad: 3,
-          updatedAt: DateTime.now(),
-          syncStatus: 'pending',
+  Future<void> _cargarMascotas() async {
+    if (mounted) {
+      setState(() {
+        cargando = true;
+      });
+    }
+
+    try {
+      final mascotasObtenidas =
+          await _repository.obtenerMascotas();
+
+      if (!mounted) return;
+
+      setState(() {
+        mascotas = mascotasObtenidas;
+
+        mascotas.sort(
+          (a, b) =>
+              a.nombre.compareTo(b.nombre),
         );
 
-        await _databaseService.insertarMascota(nir);
-
-        await _databaseService.insertarOperacionPendiente({
-          'operation_id': _uuid.v4(),
-          'entity': 'pets',
-          'entity_id': nir.id,
-          'operation': 'create',
-          'payload': jsonEncode(nir.toMap()),
-          'created_at': DateTime.now().toIso8601String(),
-          'attempts': 0,
-          'next_attempt_at': null,
-          'status': 'pending',
-        });
-
-        mascotas = [nir];
-      } else {
-        mascotas = mascotasGuardadas;
-      }
-
-      ultimaCargaLocal = DateTime.now();
+        ultimaCargaLocal = DateTime.now();
+      });
     } catch (e) {
       if (!mounted) return;
 
@@ -156,8 +187,41 @@ class _PetsScreenState extends State<PetsScreen>
     }
   }
 
+  // =========================================================
+  // SINCRONIZAR Y RECARGAR
+  // =========================================================
+
+  Future<void> _sincronizarYRecargar() async {
+    if (sincronizando) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        sincronizando = true;
+      });
+    }
+
+    try {
+      await _repository.sincronizarPendientes();
+
+      await _cargarMascotas();
+    } finally {
+      if (mounted) {
+        setState(() {
+          sincronizando = false;
+        });
+      }
+    }
+  }
+
+  // =========================================================
+  // MOSTRAR FORMULARIO
+  // =========================================================
+
   Future<void> _mostrarFormularioMascota() async {
-    final datos = await showDialog<Map<String, String>>(
+    final datos =
+        await showDialog<Map<String, String>>(
       context: context,
       builder: (context) {
         return const _FormularioMascotaDialog();
@@ -171,46 +235,49 @@ class _PetsScreenState extends State<PetsScreen>
       nombre: datos['nombre']!,
       especie: datos['especie']!,
       raza: datos['raza']!,
-      edad: int.parse(datos['edad']!),
+      edad: int.parse(
+        datos['edad']!,
+      ),
       updatedAt: DateTime.now(),
       syncStatus: 'pending',
     );
 
     try {
-      await _databaseService.insertarMascota(
+      final mascotaGuardada =
+          await _repository.crearMascota(
         nuevaMascota,
       );
-
-      await _databaseService.insertarOperacionPendiente({
-        'operation_id': _uuid.v4(),
-        'entity': 'pets',
-        'entity_id': nuevaMascota.id,
-        'operation': 'create',
-        'payload': jsonEncode(
-          nuevaMascota.toMap(),
-        ),
-        'created_at': DateTime.now().toIso8601String(),
-        'attempts': 0,
-        'next_attempt_at': null,
-        'status': 'pending',
-      });
 
       if (!mounted) return;
 
       setState(() {
-        mascotas.add(nuevaMascota);
+        mascotas.removeWhere(
+          (item) =>
+              item.id == mascotaGuardada.id,
+        );
+
+        if (!mascotaGuardada.deleted) {
+          mascotas.add(mascotaGuardada);
+        }
 
         mascotas.sort(
-          (a, b) => a.nombre.compareTo(b.nombre),
+          (a, b) =>
+              a.nombre.compareTo(b.nombre),
         );
 
         ultimaCargaLocal = DateTime.now();
       });
 
+      final estaSincronizada =
+          mascotaGuardada.syncStatus ==
+              'synced';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${nuevaMascota.nombre} se guardó correctamente en el dispositivo.',
+            estaSincronizada
+                ? '${mascotaGuardada.nombre} se guardó correctamente.'
+                : '${mascotaGuardada.nombre} se guardó en el dispositivo y quedó pendiente de sincronización.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -228,8 +295,15 @@ class _PetsScreenState extends State<PetsScreen>
     }
   }
 
-  Future<void> _eliminarMascota(Pet mascota) async {
-    final confirmar = await showDialog<bool>(
+  // =========================================================
+  // ELIMINAR MASCOTA
+  // =========================================================
+
+  Future<void> _eliminarMascota(
+    Pet mascota,
+  ) async {
+    final confirmar =
+        await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -270,29 +344,16 @@ class _PetsScreenState extends State<PetsScreen>
     if (confirmar != true) return;
 
     try {
-      await _databaseService.eliminarMascota(
+      await _repository.eliminarMascota(
         mascota.id,
       );
-
-      await _databaseService.insertarOperacionPendiente({
-        'operation_id': _uuid.v4(),
-        'entity': 'pets',
-        'entity_id': mascota.id,
-        'operation': 'delete',
-        'payload': jsonEncode({
-          'id': mascota.id,
-        }),
-        'created_at': DateTime.now().toIso8601String(),
-        'attempts': 0,
-        'next_attempt_at': null,
-        'status': 'pending',
-      });
 
       if (!mounted) return;
 
       setState(() {
         mascotas.removeWhere(
-          (item) => item.id == mascota.id,
+          (item) =>
+              item.id == mascota.id,
         );
 
         ultimaCargaLocal = DateTime.now();
@@ -301,7 +362,9 @@ class _PetsScreenState extends State<PetsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${mascota.nombre} fue eliminada.',
+            conectado
+                ? '${mascota.nombre} fue eliminada.'
+                : '${mascota.nombre} fue eliminada localmente y quedó pendiente de sincronización.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -318,6 +381,10 @@ class _PetsScreenState extends State<PetsScreen>
       );
     }
   }
+
+  // =========================================================
+  // ABRIR DETALLE
+  // =========================================================
 
   Future<void> _abrirDetalleMascota(
     Pet mascota,
@@ -337,31 +404,42 @@ class _PetsScreenState extends State<PetsScreen>
     );
   }
 
+  // =========================================================
+  // TEXTO ÚLTIMA CARGA
+  // =========================================================
+
   String _textoUltimaCarga() {
     if (ultimaCargaLocal == null) {
-      return 'Datos locales';
+      return 'Datos guardados localmente';
     }
 
     final hora = TimeOfDay.fromDateTime(
       ultimaCargaLocal!,
     );
 
-    final minuto = hora.minute.toString().padLeft(
-          2,
-          '0',
-        );
+    final minuto =
+        hora.minute.toString().padLeft(
+              2,
+              '0',
+            );
 
-    final periodo = hora.period == DayPeriod.am
-        ? 'a. m.'
-        : 'p. m.';
+    final periodo =
+        hora.period == DayPeriod.am
+            ? 'a. m.'
+            : 'p. m.';
 
-    final hora12 = hora.hourOfPeriod == 0
-        ? 12
-        : hora.hourOfPeriod;
+    final hora12 =
+        hora.hourOfPeriod == 0
+            ? 12
+            : hora.hourOfPeriod;
 
-    return 'Datos guardados localmente a las '
+    return 'Última lectura local: '
         '$hora12:$minuto $periodo';
   }
+
+  // =========================================================
+  // INDICADOR DE CONEXIÓN
+  // =========================================================
 
   Widget _indicadorConexion() {
     if (conectado) {
@@ -373,15 +451,19 @@ class _PetsScreenState extends State<PetsScreen>
           16,
           0,
         ),
-        padding: const EdgeInsets.symmetric(
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 12,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFFE8F5E9),
-          borderRadius: BorderRadius.circular(14),
+          color:
+              const Color(0xFFE8F5E9),
+          borderRadius:
+              BorderRadius.circular(14),
           border: Border.all(
-            color: const Color(0xFFA5D6A7),
+            color:
+                const Color(0xFFA5D6A7),
           ),
         ),
         child: Row(
@@ -389,17 +471,22 @@ class _PetsScreenState extends State<PetsScreen>
             Container(
               width: 34,
               height: 34,
-              decoration: const BoxDecoration(
-                color: Color(0xFFC8E6C9),
+              decoration:
+                  const BoxDecoration(
+                color:
+                    Color(0xFFC8E6C9),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.cloud_done_outlined,
-                color: Color(0xFF2E7D32),
+                color:
+                    Color(0xFF2E7D32),
                 size: 20,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(
+              width: 10,
+            ),
             Expanded(
               child: Column(
                 crossAxisAlignment:
@@ -408,21 +495,38 @@ class _PetsScreenState extends State<PetsScreen>
                   const Text(
                     'Conexión disponible',
                     style: TextStyle(
-                      color: Color(0xFF2E7D32),
-                      fontWeight: FontWeight.bold,
+                      color:
+                          Color(0xFF2E7D32),
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(
+                    height: 2,
+                  ),
                   Text(
-                    _textoUltimaCarga(),
-                    style: const TextStyle(
-                      color: Color(0xFF4E6B50),
+                    sincronizando
+                        ? 'Sincronizando datos...'
+                        : _textoUltimaCarga(),
+                    style:
+                        const TextStyle(
+                      color:
+                          Color(0xFF4E6B50),
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
+            if (sincronizando)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child:
+                    CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              ),
           ],
         ),
       );
@@ -436,15 +540,19 @@ class _PetsScreenState extends State<PetsScreen>
         16,
         0,
       ),
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 14,
         vertical: 12,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF3E0),
-        borderRadius: BorderRadius.circular(14),
+        color:
+            const Color(0xFFFFF3E0),
+        borderRadius:
+            BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFFFFCC80),
+          color:
+              const Color(0xFFFFCC80),
         ),
       ),
       child: Row(
@@ -452,17 +560,22 @@ class _PetsScreenState extends State<PetsScreen>
           Container(
             width: 34,
             height: 34,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFFE0B2),
+            decoration:
+                const BoxDecoration(
+              color:
+                  Color(0xFFFFE0B2),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.cloud_off_outlined,
-              color: Color(0xFFE65100),
+              color:
+                  Color(0xFFE65100),
               size: 20,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(
+            width: 10,
+          ),
           const Expanded(
             child: Column(
               crossAxisAlignment:
@@ -471,15 +584,18 @@ class _PetsScreenState extends State<PetsScreen>
                 Text(
                   'Sin conexión',
                   style: TextStyle(
-                    color: Color(0xFFE65100),
-                    fontWeight: FontWeight.bold,
+                    color:
+                        Color(0xFFE65100),
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
                 SizedBox(height: 2),
                 Text(
                   'Mostrando datos guardados en el dispositivo',
                   style: TextStyle(
-                    color: Color(0xFF8D5A2B),
+                    color:
+                        Color(0xFF8D5A2B),
                     fontSize: 12,
                   ),
                 ),
@@ -488,13 +604,18 @@ class _PetsScreenState extends State<PetsScreen>
           ),
           const Icon(
             Icons.storage_outlined,
-            color: Color(0xFFE65100),
+            color:
+                Color(0xFFE65100),
             size: 20,
           ),
         ],
       ),
     );
   }
+
+  // =========================================================
+  // DISPOSE
+  // =========================================================
 
   @override
   void dispose() {
@@ -504,27 +625,39 @@ class _PetsScreenState extends State<PetsScreen>
 
     _connectivitySubscription?.cancel();
 
+    _repository
+        .detenerSincronizacionAutomatica();
+
     super.dispose();
   }
+
+  // =========================================================
+  // BUILD
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F5F3),
+      backgroundColor:
+          const Color(0xFFE8F5F3),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF009688),
-        foregroundColor: Colors.white,
+        backgroundColor:
+            const Color(0xFF009688),
+        foregroundColor:
+            Colors.white,
         elevation: 0,
         title: const Text(
           'Mis mascotas',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
       body: cargando
           ? const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             )
           : RefreshIndicator(
               onRefresh: _cargarMascotas,
@@ -532,62 +665,92 @@ class _PetsScreenState extends State<PetsScreen>
                   ? ListView(
                       physics:
                           const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(24),
+                      padding:
+                          const EdgeInsets.all(
+                        24,
+                      ),
                       children: [
                         _indicadorConexion(),
-                        const SizedBox(height: 70),
+                        const SizedBox(
+                          height: 70,
+                        ),
                         Container(
-                          padding: const EdgeInsets.all(22),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(24),
+                          padding:
+                              const EdgeInsets.all(
+                            22,
                           ),
-                          child: Column(
+                          decoration:
+                              BoxDecoration(
+                            color:
+                                Colors.white,
+                            borderRadius:
+                                BorderRadius.circular(
+                              24,
+                            ),
+                          ),
+                          child:
+                              Column(
                             children: [
                               Container(
                                 width: 82,
                                 height: 82,
                                 decoration:
                                     const BoxDecoration(
-                                  color: Color(0xFFE0F2F1),
-                                  shape: BoxShape.circle,
+                                  color:
+                                      Color(0xFFE0F2F1),
+                                  shape:
+                                      BoxShape.circle,
                                 ),
-                                child: const Icon(
+                                child:
+                                    const Icon(
                                   Icons.pets,
                                   size: 42,
-                                  color: Color(0xFF009688),
+                                  color:
+                                      Color(0xFF009688),
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(
+                                height: 20,
+                              ),
                               const Text(
                                 'Aún no tienes mascotas',
                                 textAlign:
                                     TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 21,
+                                style:
+                                    TextStyle(
+                                  fontSize:
+                                      21,
                                   fontWeight:
                                       FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(
+                                height: 10,
+                              ),
                               const Text(
                                 'Agrega tu primera mascota para comenzar a llevar el control de su información.',
                                 textAlign:
                                     TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.black54,
-                                  height: 1.4,
+                                style:
+                                    TextStyle(
+                                  color:
+                                      Colors.black54,
+                                  height:
+                                      1.4,
                                 ),
                               ),
-                              const SizedBox(height: 22),
+                              const SizedBox(
+                                height: 22,
+                              ),
                               FilledButton.icon(
                                 onPressed:
                                     _mostrarFormularioMascota,
-                                icon: const Icon(
+                                icon:
+                                    const Icon(
                                   Icons.add,
                                 ),
-                                label: const Text(
+                                label:
+                                    const Text(
                                   'Agregar mascota',
                                 ),
                                 style:
@@ -597,10 +760,11 @@ class _PetsScreenState extends State<PetsScreen>
                                     0xFF009688,
                                   ),
                                   padding:
-                                      const EdgeInsets
-                                          .symmetric(
-                                    horizontal: 22,
-                                    vertical: 14,
+                                      const EdgeInsets.symmetric(
+                                    horizontal:
+                                        22,
+                                    vertical:
+                                        14,
                                   ),
                                 ),
                               ),
@@ -612,7 +776,8 @@ class _PetsScreenState extends State<PetsScreen>
                   : ListView(
                       physics:
                           const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(
+                      padding:
+                          const EdgeInsets.fromLTRB(
                         0,
                         0,
                         0,
@@ -620,7 +785,9 @@ class _PetsScreenState extends State<PetsScreen>
                       ),
                       children: [
                         _indicadorConexion(),
-                        const SizedBox(height: 14),
+                        const SizedBox(
+                          height: 14,
+                        ),
                         Padding(
                           padding:
                               const EdgeInsets.symmetric(
@@ -632,23 +799,33 @@ class _PetsScreenState extends State<PetsScreen>
                               horizontal: 18,
                               vertical: 16,
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
+                            decoration:
+                                BoxDecoration(
+                              color:
+                                  Colors.white,
                               borderRadius:
-                                  BorderRadius.circular(20),
+                                  BorderRadius.circular(
+                                20,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black
-                                      .withValues(
-                                    alpha: 0.05,
+                                  color:
+                                      Colors.black.withValues(
+                                    alpha:
+                                        0.05,
                                   ),
-                                  blurRadius: 10,
+                                  blurRadius:
+                                      10,
                                   offset:
-                                      const Offset(0, 4),
+                                      const Offset(
+                                    0,
+                                    4,
+                                  ),
                                 ),
                               ],
                             ),
-                            child: Row(
+                            child:
+                                Row(
                               children: [
                                 Container(
                                   width: 52,
@@ -657,29 +834,34 @@ class _PetsScreenState extends State<PetsScreen>
                                       const BoxDecoration(
                                     color:
                                         Color(0xFFE0F2F1),
-                                    shape: BoxShape.circle,
+                                    shape:
+                                        BoxShape.circle,
                                   ),
-                                  child: const Icon(
+                                  child:
+                                      const Icon(
                                     Icons.favorite,
                                     color:
                                         Color(0xFF009688),
                                     size: 28,
                                   ),
                                 ),
-                                const SizedBox(width: 14),
+                                const SizedBox(
+                                  width: 14,
+                                ),
                                 Expanded(
-                                  child: Column(
+                                  child:
+                                      Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment
-                                            .start,
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Tus compañeros 🐾',
-                                        style: TextStyle(
-                                          fontSize: 17,
+                                        style:
+                                            TextStyle(
+                                          fontSize:
+                                              17,
                                           fontWeight:
-                                              FontWeight
-                                                  .bold,
+                                              FontWeight.bold,
                                         ),
                                       ),
                                       const SizedBox(
@@ -700,23 +882,28 @@ class _PetsScreenState extends State<PetsScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(
+                          height: 16,
+                        ),
                         ...mascotas.map(
                           (mascota) {
                             return Padding(
                               padding:
-                                  const EdgeInsets
-                                      .symmetric(
+                                  const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
-                              child: _TarjetaMascota(
-                                mascota: mascota,
-                                onTap: () {
+                              child:
+                                  _TarjetaMascota(
+                                mascota:
+                                    mascota,
+                                onTap:
+                                    () {
                                   _abrirDetalleMascota(
                                     mascota,
                                   );
                                 },
-                                onDelete: () {
+                                onDelete:
+                                    () {
                                   _eliminarMascota(
                                     mascota,
                                   );
@@ -730,9 +917,12 @@ class _PetsScreenState extends State<PetsScreen>
             ),
       floatingActionButton:
           FloatingActionButton(
-        onPressed: _mostrarFormularioMascota,
-        backgroundColor: const Color(0xFF009688),
-        foregroundColor: Colors.white,
+        onPressed:
+            _mostrarFormularioMascota,
+        backgroundColor:
+            const Color(0xFF009688),
+        foregroundColor:
+            Colors.white,
         child: const Icon(
           Icons.add,
         ),
@@ -741,7 +931,12 @@ class _PetsScreenState extends State<PetsScreen>
   }
 }
 
-class _TarjetaMascota extends StatelessWidget {
+// =============================================================
+// TARJETA DE MASCOTA
+// =============================================================
+
+class _TarjetaMascota
+    extends StatelessWidget {
   final Pet mascota;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -754,28 +949,42 @@ class _TarjetaMascota extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pendiente =
+        mascota.syncStatus !=
+        'synced';
+
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7FF),
-        borderRadius: BorderRadius.circular(18),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(0xFFFFF7FF),
+        borderRadius:
+            BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color:
+                Colors.black.withValues(
               alpha: 0.05,
             ),
             blurRadius: 9,
-            offset: const Offset(0, 4),
+            offset:
+                const Offset(0, 4),
           ),
         ],
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding:
+              const EdgeInsets.fromLTRB(
             14,
             16,
             8,
@@ -788,48 +997,75 @@ class _TarjetaMascota extends StatelessWidget {
                 height: 58,
                 decoration:
                     const BoxDecoration(
-                  color: Color(0xFFE0F2F1),
-                  shape: BoxShape.circle,
+                  color:
+                      Color(0xFFE0F2F1),
+                  shape:
+                      BoxShape.circle,
                 ),
-                child: const Icon(
+                child:
+                    const Icon(
                   Icons.pets,
-                  color: Color(0xFF009688),
+                  color:
+                      Color(0xFF009688),
                   size: 32,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(
+                width: 14,
+              ),
               Expanded(
-                child: Column(
+                child:
+                    Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     Text(
                       mascota.nombre,
-                      style: const TextStyle(
+                      style:
+                          const TextStyle(
                         fontSize: 17,
                         fontWeight:
                             FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(
+                      height: 4,
+                    ),
                     Text(
                       '${mascota.especie} • ${mascota.raza}',
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.black54,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(
+                      height: 3,
+                    ),
                     Text(
                       'Edad: ${mascota.edad} ${mascota.edad == 1 ? 'año' : 'años'}',
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.black54,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Toca para ver su ficha →',
-                      style: TextStyle(
-                        color: Color(0xFF009688),
+                    const SizedBox(
+                      height: 8,
+                    ),
+                    Text(
+                      pendiente
+                          ? 'Pendiente de sincronización'
+                          : 'Sincronizada con el servidor',
+                      style:
+                          TextStyle(
+                        color: pendiente
+                            ? const Color(
+                                0xFFE65100,
+                              )
+                            : const Color(
+                                0xFF009688,
+                              ),
                         fontWeight:
                             FontWeight.w600,
                         fontSize: 12,
@@ -839,23 +1075,31 @@ class _TarjetaMascota extends StatelessWidget {
                 ),
               ),
               PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'eliminar') {
+                onSelected:
+                    (value) {
+                  if (value ==
+                      'eliminar') {
                     onDelete();
                   }
                 },
-                itemBuilder: (context) {
+                itemBuilder:
+                    (context) {
                   return const [
                     PopupMenuItem(
-                      value: 'eliminar',
-                      child: Row(
+                      value:
+                          'eliminar',
+                      child:
+                          Row(
                         children: [
                           Icon(
                             Icons
                                 .delete_outline,
-                            color: Colors.red,
+                            color:
+                                Colors.red,
                           ),
-                          SizedBox(width: 8),
+                          SizedBox(
+                            width: 8,
+                          ),
                           Text(
                             'Eliminar',
                           ),
@@ -873,18 +1117,24 @@ class _TarjetaMascota extends StatelessWidget {
   }
 }
 
+// =============================================================
+// FORMULARIO
+// =============================================================
+
 class _FormularioMascotaDialog
     extends StatefulWidget {
   const _FormularioMascotaDialog();
 
   @override
-  State<_FormularioMascotaDialog>
+  State<
+      _FormularioMascotaDialog>
       createState() =>
           _FormularioMascotaDialogState();
 }
 
 class _FormularioMascotaDialogState
-    extends State<_FormularioMascotaDialog> {
+    extends State<
+        _FormularioMascotaDialog> {
   final _formKey =
       GlobalKey<FormState>();
 
@@ -932,7 +1182,8 @@ class _FormularioMascotaDialogState
       context,
       {
         'nombre':
-            _nombreController.text.trim(),
+            _nombreController.text
+                .trim(),
         'especie': _especie,
         'raza':
             _razaController.text.trim(),
@@ -943,12 +1194,15 @@ class _FormularioMascotaDialogState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return AlertDialog(
       title: const Text(
         'Agregar mascota',
         style: TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight:
+              FontWeight.bold,
         ),
       ),
       content:
@@ -966,19 +1220,28 @@ class _FormularioMascotaDialogState
                     TextCapitalization.words,
                 decoration:
                     const InputDecoration(
-                  labelText: 'Nombre',
+                  labelText:
+                      'Nombre',
                   prefixIcon:
-                      Icon(Icons.pets),
+                      Icon(
+                    Icons.pets,
+                  ),
                   border:
                       OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
+                validator:
+                    (value) {
+                  if (value ==
+                          null ||
+                      value
+                          .trim()
+                          .isEmpty) {
                     return 'Ingresa el nombre';
                   }
 
-                  if (value.trim().length <
+                  if (value
+                          .trim()
+                          .length <
                       2) {
                     return 'El nombre es demasiado corto';
                   }
@@ -995,8 +1258,10 @@ class _FormularioMascotaDialogState
                     _especie,
                 decoration:
                     const InputDecoration(
-                  labelText: 'Especie',
-                  prefixIcon: Icon(
+                  labelText:
+                      'Especie',
+                  prefixIcon:
+                      Icon(
                     Icons
                         .category_outlined,
                   ),
@@ -1005,24 +1270,34 @@ class _FormularioMascotaDialogState
                 ),
                 items: const [
                   DropdownMenuItem(
-                    value: 'Perro',
+                    value:
+                        'Perro',
                     child:
-                        Text('Perro'),
+                        Text(
+                      'Perro',
+                    ),
                   ),
                   DropdownMenuItem(
-                    value: 'Gato',
+                    value:
+                        'Gato',
                     child:
-                        Text('Gato'),
+                        Text(
+                      'Gato',
+                    ),
                   ),
                   DropdownMenuItem(
-                    value: 'Otro',
+                    value:
+                        'Otro',
                     child:
-                        Text('Otro'),
+                        Text(
+                      'Otro',
+                    ),
                   ),
                 ],
                 onChanged:
                     (value) {
-                  if (value == null) {
+                  if (value ==
+                      null) {
                     return;
                   }
 
@@ -1042,17 +1317,23 @@ class _FormularioMascotaDialogState
                     TextCapitalization.words,
                 decoration:
                     const InputDecoration(
-                  labelText: 'Raza',
-                  prefixIcon: Icon(
+                  labelText:
+                      'Raza',
+                  prefixIcon:
+                      Icon(
                     Icons
                         .info_outline,
                   ),
                   border:
                       OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
+                validator:
+                    (value) {
+                  if (value ==
+                          null ||
+                      value
+                          .trim()
+                          .isEmpty) {
                     return 'Ingresa la raza';
                   }
 
@@ -1069,17 +1350,25 @@ class _FormularioMascotaDialogState
                     TextInputType.number,
                 decoration:
                     const InputDecoration(
-                  labelText: 'Edad',
-                  prefixIcon: Icon(
-                    Icons.cake_outlined,
+                  labelText:
+                      'Edad',
+                  prefixIcon:
+                      Icon(
+                    Icons
+                        .cake_outlined,
                   ),
-                  suffixText: 'años',
+                  suffixText:
+                      'años',
                   border:
                       OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
+                validator:
+                    (value) {
+                  if (value ==
+                          null ||
+                      value
+                          .trim()
+                          .isEmpty) {
                     return 'Ingresa la edad';
                   }
 
@@ -1088,7 +1377,8 @@ class _FormularioMascotaDialogState
                     value.trim(),
                   );
 
-                  if (edad == null) {
+                  if (edad ==
+                      null) {
                     return 'Ingresa un número válido';
                   }
 
@@ -1111,12 +1401,14 @@ class _FormularioMascotaDialogState
               context,
             );
           },
-          child: const Text(
+          child:
+              const Text(
             'Cancelar',
           ),
         ),
         FilledButton(
-          onPressed: _guardar,
+          onPressed:
+              _guardar,
           style:
               FilledButton.styleFrom(
             backgroundColor:
@@ -1124,7 +1416,8 @@ class _FormularioMascotaDialogState
               0xFF009688,
             ),
           ),
-          child: const Text(
+          child:
+              const Text(
             'Guardar',
           ),
         ),

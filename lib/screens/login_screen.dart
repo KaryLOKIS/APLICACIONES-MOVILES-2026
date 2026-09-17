@@ -36,13 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> iniciarSesion() async {
-    final correo = correoController.text.trim();
-
-    // No hacemos trim de la contraseña porque los espacios
-    // podrían formar parte de la contraseña real.
+    final email = correoController.text.trim();
     final password = passwordController.text;
 
-    if (correo.isEmpty || password.isEmpty) {
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -60,12 +57,19 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      debugPrint('PETCARE LOGIN: enviando solicitud al backend...');
+      debugPrint('PETCARE LOGIN: correo = $email');
+
       final response = await _dio.post(
         ApiConfig.loginEndpoint,
         data: {
-          'email': correo,
+          'email': email,
           'password': password,
         },
+      );
+
+      debugPrint(
+        'PETCARE LOGIN: respuesta HTTP = ${response.statusCode}',
       );
 
       final data = response.data;
@@ -76,11 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      final accessToken =
-          data['access_token'] as String?;
-
-      final refreshToken =
-          data['refresh_token'] as String?;
+      final accessToken = data['access_token']?.toString();
+      final refreshToken = data['refresh_token']?.toString();
 
       if (accessToken == null ||
           accessToken.isEmpty ||
@@ -91,10 +92,13 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      // Guardamos ambos tokens en almacenamiento seguro.
       await _secureStorage.guardarTokens(
         accessToken: accessToken,
         refreshToken: refreshToken,
+      );
+
+      debugPrint(
+        'PETCARE LOGIN: tokens guardados correctamente.',
       );
 
       if (!mounted) {
@@ -129,6 +133,18 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      debugPrint(
+        'PETCARE LOGIN: ERROR DIO = ${e.message}',
+      );
+
+      debugPrint(
+        'PETCARE LOGIN: STATUS = ${e.response?.statusCode}',
+      );
+
+      debugPrint(
+        'PETCARE LOGIN: RESPUESTA = ${e.response?.data}',
+      );
+
       String mensaje =
           'No se pudo conectar con el servidor.';
 
@@ -145,6 +161,10 @@ class _LoginScreenState extends State<LoginScreen> {
           DioExceptionType.connectionTimeout) {
         mensaje =
             'Tiempo de conexión agotado. Verifica el servidor.';
+      } else if (e.type ==
+          DioExceptionType.sendTimeout) {
+        mensaje =
+            'Tiempo de envío agotado. Verifica la conexión.';
       } else if (e.type ==
           DioExceptionType.receiveTimeout) {
         mensaje =
@@ -165,6 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(
           content: Text(mensaje),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     } catch (e) {
@@ -172,12 +193,17 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      debugPrint(
+        'PETCARE LOGIN: ERROR GENERAL = $e',
+      );
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'No se pudo iniciar la sesión: $e',
           ),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
@@ -194,23 +220,27 @@ class _LoginScreenState extends State<LoginScreen> {
       final errores = data['errores'];
 
       if (errores is List && errores.isNotEmpty) {
-        final primerError = errores.first;
+        final mensajes = <String>[];
 
-        if (primerError is Map) {
-          final mensaje =
-              primerError['msg'] ??
-              primerError['message'] ??
-              primerError['mensaje'];
+        for (final error in errores) {
+          if (error is Map) {
+            final mensaje =
+                error['msg'] ??
+                error['message'] ??
+                error['mensaje'];
 
-          if (mensaje is String &&
-              mensaje.isNotEmpty) {
-            return mensaje;
+            if (mensaje is String &&
+                mensaje.trim().isNotEmpty) {
+              mensajes.add(mensaje.trim());
+            }
+          } else if (error is String &&
+              error.trim().isNotEmpty) {
+            mensajes.add(error.trim());
           }
         }
 
-        if (primerError is String &&
-            primerError.isNotEmpty) {
-          return primerError;
+        if (mensajes.isNotEmpty) {
+          return mensajes.join('\n');
         }
       }
 
@@ -219,8 +249,9 @@ class _LoginScreenState extends State<LoginScreen> {
           data['message'] ??
           data['error'];
 
-      if (mensaje is String && mensaje.isNotEmpty) {
-        return mensaje;
+      if (mensaje is String &&
+          mensaje.trim().isNotEmpty) {
+        return mensaje.trim();
       }
     }
 
@@ -278,6 +309,8 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: correoController,
               keyboardType:
                   TextInputType.emailAddress,
+              textInputAction:
+                  TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Correo electrónico',
                 hintText: 'ejemplo@correo.com',
@@ -298,6 +331,13 @@ class _LoginScreenState extends State<LoginScreen> {
             TextField(
               controller: passwordController,
               obscureText: ocultarPassword,
+              textInputAction:
+                  TextInputAction.done,
+              onSubmitted: (_) {
+                if (!iniciandoSesion) {
+                  iniciarSesion();
+                }
+              },
               decoration: InputDecoration(
                 labelText: 'Contraseña',
                 prefixIcon: const Icon(
@@ -328,7 +368,8 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 10),
 
             Align(
-              alignment: Alignment.centerRight,
+              alignment:
+                  Alignment.centerRight,
               child: TextButton(
                 onPressed: () {
                   ScaffoldMessenger.of(context)
@@ -360,7 +401,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   foregroundColor: Colors.white,
                   disabledBackgroundColor:
                       Colors.teal.shade200,
-                  shape: RoundedRectangleBorder(
+                  shape:
+                      RoundedRectangleBorder(
                     borderRadius:
                         BorderRadius.circular(12),
                   ),
