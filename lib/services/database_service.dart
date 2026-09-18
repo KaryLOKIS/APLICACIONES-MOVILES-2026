@@ -49,7 +49,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -67,9 +67,9 @@ class DatabaseService {
       'PETCARE DIAGNOSTICO: CREANDO BASE DE DATOS',
     );
 
-    // ---------------------------------------------------------
+    // =======================================================
     // TABLA DE MASCOTAS
-    // ---------------------------------------------------------
+    // =======================================================
 
     await db.execute('''
       CREATE TABLE pets (
@@ -84,9 +84,9 @@ class DatabaseService {
       )
     ''');
 
-    // ---------------------------------------------------------
+    // =======================================================
     // TABLA DE OPERACIONES PENDIENTES
-    // ---------------------------------------------------------
+    // =======================================================
 
     await db.execute('''
       CREATE TABLE pending_operations (
@@ -102,9 +102,9 @@ class DatabaseService {
       )
     ''');
 
-    // ---------------------------------------------------------
+    // =======================================================
     // TABLA DE USUARIOS
-    // ---------------------------------------------------------
+    // =======================================================
 
     await db.execute('''
       CREATE TABLE users (
@@ -117,9 +117,9 @@ class DatabaseService {
       )
     ''');
 
-    // ---------------------------------------------------------
+    // =======================================================
     // TABLA DE RECORDATORIOS
-    // ---------------------------------------------------------
+    // =======================================================
 
     await db.execute('''
       CREATE TABLE reminders (
@@ -128,6 +128,22 @@ class DatabaseService {
         mascota TEXT NOT NULL,
         fecha TEXT NOT NULL,
         tipo TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    // =======================================================
+    // TABLA DE CITAS VETERINARIAS
+    // =======================================================
+
+    await db.execute('''
+      CREATE TABLE appointments (
+        id TEXT PRIMARY KEY,
+        mascota TEXT NOT NULL,
+        veterinario TEXT NOT NULL,
+        motivo TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        hora TEXT NOT NULL,
         created_at TEXT NOT NULL
       )
     ''');
@@ -151,10 +167,10 @@ class DatabaseService {
       '$oldVersion -> $newVersion',
     );
 
-    // ---------------------------------------------------------
+    // =======================================================
     // VERSION 2
     // Agrega tabla users
-    // ---------------------------------------------------------
+    // =======================================================
 
     if (oldVersion < 2) {
       await db.execute('''
@@ -174,10 +190,10 @@ class DatabaseService {
       );
     }
 
-    // ---------------------------------------------------------
+    // =======================================================
     // VERSION 3
     // Agrega tabla reminders
-    // ---------------------------------------------------------
+    // =======================================================
 
     if (oldVersion < 3) {
       await db.execute('''
@@ -193,6 +209,30 @@ class DatabaseService {
 
       print(
         'PETCARE DIAGNOSTICO: TABLA REMINDERS '
+        'CREADA EN MIGRACION',
+      );
+    }
+
+    // =======================================================
+    // VERSION 4
+    // Agrega tabla appointments
+    // =======================================================
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE appointments (
+          id TEXT PRIMARY KEY,
+          mascota TEXT NOT NULL,
+          veterinario TEXT NOT NULL,
+          motivo TEXT NOT NULL,
+          fecha TEXT NOT NULL,
+          hora TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+
+      print(
+        'PETCARE DIAGNOSTICO: TABLA APPOINTMENTS '
         'CREADA EN MIGRACION',
       );
     }
@@ -232,10 +272,6 @@ class DatabaseService {
       '$correoNormalizado',
     );
 
-    // ---------------------------------------------------------
-    // COMPROBAR SI EL CORREO YA EXISTE
-    // ---------------------------------------------------------
-
     final usuariosExistentes = await db.query(
       'users',
       where: 'correo = ?',
@@ -252,25 +288,13 @@ class DatabaseService {
       return false;
     }
 
-    // ---------------------------------------------------------
-    // GENERAR SALT ALEATORIO
-    // ---------------------------------------------------------
-
     final salt = _uuid.v4();
-
-    // ---------------------------------------------------------
-    // GENERAR HASH
-    // ---------------------------------------------------------
 
     final passwordHash =
         _generarHashPassword(
       password,
       salt,
     );
-
-    // ---------------------------------------------------------
-    // GUARDAR USUARIO
-    // ---------------------------------------------------------
 
     await db.insert(
       'users',
@@ -327,7 +351,9 @@ class DatabaseService {
       return null;
     }
 
-    return resultados.first;
+    return Map<String, dynamic>.from(
+      resultados.first,
+    );
   }
 
   // =========================================================
@@ -351,10 +377,6 @@ class DatabaseService {
       correo,
     );
 
-    // ---------------------------------------------------------
-    // USUARIO NO EXISTE
-    // ---------------------------------------------------------
-
     if (usuario == null) {
       print(
         'PETCARE DIAGNOSTICO: USUARIO NO EXISTE',
@@ -363,29 +385,17 @@ class DatabaseService {
       return null;
     }
 
-    // ---------------------------------------------------------
-    // OBTENER SALT Y HASH GUARDADOS
-    // ---------------------------------------------------------
-
     final salt =
         usuario['password_salt'] as String;
 
     final passwordHashGuardado =
         usuario['password_hash'] as String;
 
-    // ---------------------------------------------------------
-    // GENERAR HASH CON LA CONTRASEÑA INGRESADA
-    // ---------------------------------------------------------
-
     final passwordHashIngresado =
         _generarHashPassword(
       password,
       salt,
     );
-
-    // ---------------------------------------------------------
-    // COMPARAR CONTRASEÑAS
-    // ---------------------------------------------------------
 
     if (passwordHashIngresado !=
         passwordHashGuardado) {
@@ -438,7 +448,9 @@ class DatabaseService {
 
     return maps
         .map(
-          (map) => Pet.fromMap(map),
+          (map) => Pet.fromMap(
+            Map<String, dynamic>.from(map),
+          ),
         )
         .toList();
   }
@@ -493,7 +505,7 @@ class DatabaseService {
 
     await db.insert(
       'pending_operations',
-      operation,
+      Map<String, dynamic>.from(operation),
       conflictAlgorithm:
           ConflictAlgorithm.replace,
     );
@@ -507,12 +519,21 @@ class DatabaseService {
       obtenerOperacionesPendientes() async {
     final db = await database;
 
-    return await db.query(
+    final resultados = await db.query(
       'pending_operations',
       where: 'status = ?',
       whereArgs: ['pending'],
       orderBy: 'created_at ASC',
     );
+
+    return resultados
+        .map(
+          (operation) =>
+              Map<String, dynamic>.from(
+            operation,
+          ),
+        )
+        .toList();
   }
 
   // =========================================================
@@ -527,7 +548,7 @@ class DatabaseService {
 
     await db.update(
       'pending_operations',
-      values,
+      Map<String, dynamic>.from(values),
       where: 'operation_id = ?',
       whereArgs: [operationId],
     );
@@ -580,9 +601,6 @@ class DatabaseService {
         orderBy: 'created_at ASC',
       );
 
-      // Crear una copia mutable de cada registro.
-      // Esto evita el error:
-      // Unsupported operation: read-only
       final recordatorios =
           resultados
               .map(
@@ -632,6 +650,103 @@ class DatabaseService {
   }
 
   // =========================================================
+  // INSERTAR CITA VETERINARIA
+  // =========================================================
+
+  Future<void> insertarCitaVeterinaria({
+    required String mascota,
+    required String veterinario,
+    required String motivo,
+    required String fecha,
+    required String hora,
+  }) async {
+    final db = await database;
+
+    await db.insert(
+      'appointments',
+      {
+        'id': _uuid.v4(),
+        'mascota': mascota.trim(),
+        'veterinario': veterinario.trim(),
+        'motivo': motivo.trim(),
+        'fecha': fecha,
+        'hora': hora,
+        'created_at':
+            DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm:
+          ConflictAlgorithm.abort,
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'CITA VETERINARIA GUARDADA',
+    );
+  }
+
+  // =========================================================
+  // OBTENER CITAS VETERINARIAS
+  // =========================================================
+
+  Future<List<Map<String, dynamic>>>
+      obtenerCitasVeterinarias() async {
+    try {
+      final db = await database;
+
+      final resultados = await db.query(
+        'appointments',
+        orderBy: 'fecha ASC, hora ASC',
+      );
+
+      final citas =
+          resultados
+              .map(
+                (cita) =>
+                    Map<String, dynamic>.from(
+                  cita,
+                ),
+              )
+              .toList();
+
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'CITAS VETERINARIAS CARGADAS = '
+        '${citas.length}',
+      );
+
+      return citas;
+    } catch (e) {
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'ERROR AL OBTENER CITAS: $e',
+      );
+
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // ELIMINAR CITA VETERINARIA
+  // =========================================================
+
+  Future<void> eliminarCitaVeterinaria(
+    String id,
+  ) async {
+    final db = await database;
+
+    await db.delete(
+      'appointments',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'CITA VETERINARIA ELIMINADA = $id',
+    );
+  }
+
+  // =========================================================
   // DIAGNÓSTICO DE USUARIOS
   // =========================================================
 
@@ -672,7 +787,13 @@ class DatabaseService {
     );
 
     final recordatorios = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad FROM reminders',
+      'SELECT COUNT(*) AS cantidad '
+      'FROM reminders',
+    );
+
+    final citas = await db.rawQuery(
+      'SELECT COUNT(*) AS cantidad '
+      'FROM appointments',
     );
 
     print(
@@ -699,6 +820,11 @@ class DatabaseService {
     print(
       'RECORDATORIOS: '
       '${recordatorios.first['cantidad']}',
+    );
+
+    print(
+      'CITAS VETERINARIAS: '
+      '${citas.first['cantidad']}',
     );
 
     print(
@@ -744,10 +870,6 @@ class DatabaseService {
       '=====================================================',
     );
 
-    // ---------------------------------------------------------
-    // SI LA BASE ESTA ABIERTA, ELIMINAR LAS TABLAS
-    // ---------------------------------------------------------
-
     if (_database != null) {
       print(
         'PETCARE DIAGNOSTICO: '
@@ -792,6 +914,15 @@ class DatabaseService {
         'TABLA REMINDERS LIMPIADA',
       );
 
+      await _database!.delete(
+        'appointments',
+      );
+
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'TABLA APPOINTMENTS LIMPIADA',
+      );
+
       await diagnosticarBaseDatos();
 
       await _database!.close();
@@ -809,9 +940,9 @@ class DatabaseService {
       );
     }
 
-    // ---------------------------------------------------------
+    // =======================================================
     // OBTENER RUTA DEL ARCHIVO
-    // ---------------------------------------------------------
+    // =======================================================
 
     final databasePath =
         await getDatabasesPath();
@@ -826,9 +957,9 @@ class DatabaseService {
       'ELIMINANDO ARCHIVO = $path',
     );
 
-    // ---------------------------------------------------------
+    // =======================================================
     // ELIMINAR ARCHIVO FISICO
-    // ---------------------------------------------------------
+    // =======================================================
 
     await deleteDatabase(path);
 
