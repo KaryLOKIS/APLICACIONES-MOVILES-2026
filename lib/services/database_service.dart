@@ -49,7 +49,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -117,6 +117,21 @@ class DatabaseService {
       )
     ''');
 
+    // ---------------------------------------------------------
+    // TABLA DE RECORDATORIOS
+    // ---------------------------------------------------------
+
+    await db.execute('''
+      CREATE TABLE reminders (
+        id TEXT PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        mascota TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
     print(
       'PETCARE DIAGNOSTICO: TABLAS CREADAS CORRECTAMENTE',
     );
@@ -132,8 +147,14 @@ class DatabaseService {
     int newVersion,
   ) async {
     print(
-      'PETCARE DIAGNOSTICO: MIGRACION $oldVersion -> $newVersion',
+      'PETCARE DIAGNOSTICO: MIGRACION '
+      '$oldVersion -> $newVersion',
     );
+
+    // ---------------------------------------------------------
+    // VERSION 2
+    // Agrega tabla users
+    // ---------------------------------------------------------
 
     if (oldVersion < 2) {
       await db.execute('''
@@ -148,7 +169,31 @@ class DatabaseService {
       ''');
 
       print(
-        'PETCARE DIAGNOSTICO: TABLA USERS CREADA EN MIGRACION',
+        'PETCARE DIAGNOSTICO: TABLA USERS '
+        'CREADA EN MIGRACION',
+      );
+    }
+
+    // ---------------------------------------------------------
+    // VERSION 3
+    // Agrega tabla reminders
+    // ---------------------------------------------------------
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE reminders (
+          id TEXT PRIMARY KEY,
+          titulo TEXT NOT NULL,
+          mascota TEXT NOT NULL,
+          fecha TEXT NOT NULL,
+          tipo TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+
+      print(
+        'PETCARE DIAGNOSTICO: TABLA REMINDERS '
+        'CREADA EN MIGRACION',
       );
     }
   }
@@ -183,7 +228,8 @@ class DatabaseService {
         correo.trim().toLowerCase();
 
     print(
-      'PETCARE DIAGNOSTICO: REGISTRANDO USUARIO $correoNormalizado',
+      'PETCARE DIAGNOSTICO: REGISTRANDO USUARIO '
+      '$correoNormalizado',
     );
 
     // ---------------------------------------------------------
@@ -198,7 +244,8 @@ class DatabaseService {
     );
 
     print(
-      'PETCARE DIAGNOSTICO: USUARIOS CON ESE CORREO = ${usuariosExistentes.length}',
+      'PETCARE DIAGNOSTICO: USUARIOS CON ESE CORREO = '
+      '${usuariosExistentes.length}',
     );
 
     if (usuariosExistentes.isNotEmpty) {
@@ -241,7 +288,8 @@ class DatabaseService {
     );
 
     print(
-      'PETCARE DIAGNOSTICO: USUARIO GUARDADO CORRECTAMENTE',
+      'PETCARE DIAGNOSTICO: USUARIO '
+      'GUARDADO CORRECTAMENTE',
     );
 
     await diagnosticarUsuarios();
@@ -270,7 +318,9 @@ class DatabaseService {
     );
 
     print(
-      'PETCARE DIAGNOSTICO: BUSQUEDA DE $correoNormalizado -> ${resultados.length} RESULTADO(S)',
+      'PETCARE DIAGNOSTICO: BUSQUEDA DE '
+      '$correoNormalizado -> '
+      '${resultados.length} RESULTADO(S)',
     );
 
     if (resultados.isEmpty) {
@@ -290,7 +340,8 @@ class DatabaseService {
     required String password,
   }) async {
     print(
-      'PETCARE DIAGNOSTICO: VALIDANDO LOGIN PARA $correo',
+      'PETCARE DIAGNOSTICO: VALIDANDO LOGIN PARA '
+      '$correo',
     );
 
     await diagnosticarUsuarios();
@@ -339,14 +390,16 @@ class DatabaseService {
     if (passwordHashIngresado !=
         passwordHashGuardado) {
       print(
-        'PETCARE DIAGNOSTICO: CONTRASEÑA INCORRECTA',
+        'PETCARE DIAGNOSTICO: '
+        'CONTRASEÑA INCORRECTA',
       );
 
       return null;
     }
 
     print(
-      'PETCARE DIAGNOSTICO: CREDENCIALES CORRECTAS',
+      'PETCARE DIAGNOSTICO: '
+      'CREDENCIALES CORRECTAS',
     );
 
     return usuario;
@@ -481,6 +534,104 @@ class DatabaseService {
   }
 
   // =========================================================
+  // INSERTAR RECORDATORIO
+  // =========================================================
+
+  Future<void> insertarRecordatorio({
+    required String titulo,
+    required String mascota,
+    required String fecha,
+    required String tipo,
+  }) async {
+    final db = await database;
+
+    await db.insert(
+      'reminders',
+      {
+        'id': _uuid.v4(),
+        'titulo': titulo.trim(),
+        'mascota': mascota.trim(),
+        'fecha': fecha,
+        'tipo': tipo,
+        'created_at':
+            DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm:
+          ConflictAlgorithm.abort,
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'RECORDATORIO GUARDADO',
+    );
+  }
+
+  // =========================================================
+  // OBTENER RECORDATORIOS
+  // =========================================================
+
+  Future<List<Map<String, dynamic>>>
+      obtenerRecordatorios() async {
+    try {
+      final db = await database;
+
+      final resultados = await db.query(
+        'reminders',
+        orderBy: 'created_at ASC',
+      );
+
+      // Crear una copia mutable de cada registro.
+      // Esto evita el error:
+      // Unsupported operation: read-only
+      final recordatorios =
+          resultados
+              .map(
+                (recordatorio) =>
+                    Map<String, dynamic>.from(
+                  recordatorio,
+                ),
+              )
+              .toList();
+
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'RECORDATORIOS CARGADOS = '
+        '${recordatorios.length}',
+      );
+
+      return recordatorios;
+    } catch (e) {
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'ERROR AL OBTENER RECORDATORIOS: $e',
+      );
+
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // ELIMINAR RECORDATORIO
+  // =========================================================
+
+  Future<void> eliminarRecordatorio(
+    String id,
+  ) async {
+    final db = await database;
+
+    await db.delete(
+      'reminders',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'RECORDATORIO ELIMINADO = $id',
+    );
+  }
+
+  // =========================================================
   // DIAGNÓSTICO DE USUARIOS
   // =========================================================
 
@@ -495,7 +646,8 @@ class DatabaseService {
         resultado.first['cantidad'];
 
     print(
-      'PETCARE DIAGNOSTICO: USUARIOS EN SQLITE = $cantidad',
+      'PETCARE DIAGNOSTICO: '
+      'USUARIOS EN SQLITE = $cantidad',
     );
   }
 
@@ -515,24 +667,40 @@ class DatabaseService {
     );
 
     final operaciones = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad FROM pending_operations',
+      'SELECT COUNT(*) AS cantidad '
+      'FROM pending_operations',
+    );
+
+    final recordatorios = await db.rawQuery(
+      'SELECT COUNT(*) AS cantidad FROM reminders',
     );
 
     print(
       '=====================================================',
     );
+
     print(
       'PETCARE DIAGNOSTICO: ESTADO DE SQLITE',
     );
+
     print(
       'USUARIOS: ${usuarios.first['cantidad']}',
     );
+
     print(
       'MASCOTAS: ${mascotas.first['cantidad']}',
     );
+
     print(
-      'OPERACIONES PENDIENTES: ${operaciones.first['cantidad']}',
+      'OPERACIONES PENDIENTES: '
+      '${operaciones.first['cantidad']}',
     );
+
+    print(
+      'RECORDATORIOS: '
+      '${recordatorios.first['cantidad']}',
+    );
+
     print(
       '=====================================================',
     );
@@ -566,9 +734,12 @@ class DatabaseService {
     print(
       '=====================================================',
     );
+
     print(
-      'PETCARE DIAGNOSTICO: INICIANDO ELIMINACION DE SQLITE',
+      'PETCARE DIAGNOSTICO: '
+      'INICIANDO ELIMINACION DE SQLITE',
     );
+
     print(
       '=====================================================',
     );
@@ -579,7 +750,8 @@ class DatabaseService {
 
     if (_database != null) {
       print(
-        'PETCARE DIAGNOSTICO: BASE ABIERTA, LIMPIANDO TABLAS',
+        'PETCARE DIAGNOSTICO: '
+        'BASE ABIERTA, LIMPIANDO TABLAS',
       );
 
       await diagnosticarBaseDatos();
@@ -589,7 +761,8 @@ class DatabaseService {
       );
 
       print(
-        'PETCARE DIAGNOSTICO: TABLA PETS LIMPIADA',
+        'PETCARE DIAGNOSTICO: '
+        'TABLA PETS LIMPIADA',
       );
 
       await _database!.delete(
@@ -597,7 +770,8 @@ class DatabaseService {
       );
 
       print(
-        'PETCARE DIAGNOSTICO: TABLA PENDING_OPERATIONS LIMPIADA',
+        'PETCARE DIAGNOSTICO: '
+        'TABLA PENDING_OPERATIONS LIMPIADA',
       );
 
       await _database!.delete(
@@ -605,7 +779,17 @@ class DatabaseService {
       );
 
       print(
-        'PETCARE DIAGNOSTICO: TABLA USERS LIMPIADA',
+        'PETCARE DIAGNOSTICO: '
+        'TABLA USERS LIMPIADA',
+      );
+
+      await _database!.delete(
+        'reminders',
+      );
+
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'TABLA REMINDERS LIMPIADA',
       );
 
       await diagnosticarBaseDatos();
@@ -615,11 +799,13 @@ class DatabaseService {
       _database = null;
 
       print(
-        'PETCARE DIAGNOSTICO: CONEXION SQLITE CERRADA',
+        'PETCARE DIAGNOSTICO: '
+        'CONEXION SQLITE CERRADA',
       );
     } else {
       print(
-        'PETCARE DIAGNOSTICO: LA CONEXION SQLITE YA ESTABA CERRADA',
+        'PETCARE DIAGNOSTICO: '
+        'LA CONEXION SQLITE YA ESTABA CERRADA',
       );
     }
 
@@ -636,7 +822,8 @@ class DatabaseService {
     );
 
     print(
-      'PETCARE DIAGNOSTICO: ELIMINANDO ARCHIVO = $path',
+      'PETCARE DIAGNOSTICO: '
+      'ELIMINANDO ARCHIVO = $path',
     );
 
     // ---------------------------------------------------------
@@ -646,15 +833,19 @@ class DatabaseService {
     await deleteDatabase(path);
 
     print(
-      'PETCARE DIAGNOSTICO: ARCHIVO SQLITE ELIMINADO',
+      'PETCARE DIAGNOSTICO: '
+      'ARCHIVO SQLITE ELIMINADO',
     );
 
     print(
       '=====================================================',
     );
+
     print(
-      'PETCARE DIAGNOSTICO: ELIMINACION FINALIZADA',
+      'PETCARE DIAGNOSTICO: '
+      'ELIMINACION FINALIZADA',
     );
+
     print(
       '=====================================================',
     );

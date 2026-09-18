@@ -1,10 +1,18 @@
+import 'package:json_annotation/json_annotation.dart';
+
+part 'pet.g.dart';
+
+@JsonSerializable()
 class Pet {
   final String id;
   final String nombre;
   final String especie;
   final String raza;
   final int edad;
+
+  @JsonKey(name: 'updated_at')
   final DateTime updatedAt;
+
   final String syncStatus;
   final bool deleted;
 
@@ -19,7 +27,14 @@ class Pet {
     this.deleted = false,
   });
 
-  // Convertir el objeto Pet a un mapa para SQLite.
+  factory Pet.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      _$PetFromJson(json);
+
+  Map<String, dynamic> toJson() =>
+      _$PetToJson(this);
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -33,8 +48,9 @@ class Pet {
     };
   }
 
-  // Crear un objeto Pet a partir de un registro de SQLite.
-  factory Pet.fromMap(Map<String, dynamic> map) {
+  factory Pet.fromMap(
+    Map<String, dynamic> map,
+  ) {
     return Pet(
       id: map['id'] as String,
       nombre: map['nombre'] as String,
@@ -44,12 +60,13 @@ class Pet {
       updatedAt: DateTime.parse(
         map['updated_at'] as String,
       ),
-      syncStatus: map['sync_status'] as String? ?? 'pending',
-      deleted: (map['deleted'] as int? ?? 0) == 1,
+      syncStatus:
+          map['sync_status'] as String? ?? 'pending',
+      deleted:
+          (map['deleted'] as int? ?? 0) == 1,
     );
   }
 
-  // Crear una copia modificando solamente los campos necesarios.
   Pet copyWith({
     String? id,
     String? nombre,

@@ -1,19 +1,23 @@
 class ApiConfig {
   ApiConfig._();
 
-  // =========================================================
-  // CONFIGURACION DEL BACKEND
-  // =========================================================
+  // ==========================================
+  // DIRECCIÓN DEL BACKEND
+  // ==========================================
+  //
+  // En desarrollo se utiliza el backend local.
+  // Para producción se puede indicar otra URL
+  // mediante --dart-define=API_BASE_URL=...
+  //
 
-  // Android Emulator:
-  // 10.0.2.2 representa la computadora donde se ejecuta
-  // nuestro servidor local.
-  static const String baseUrl =
-      'http://10.0.2.2:3000';
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:3000',
+  );
 
-  // =========================================================
-  // TIMEOUTS
-  // =========================================================
+  // ==========================================
+  // TIEMPOS DE ESPERA
+  // ==========================================
 
   static const Duration connectTimeout =
       Duration(seconds: 10);
@@ -24,9 +28,9 @@ class ApiConfig {
   static const Duration sendTimeout =
       Duration(seconds: 15);
 
-  // =========================================================
-  // ENDPOINTS DE AUTENTICACION
-  // =========================================================
+  // ==========================================
+  // ENDPOINTS DE AUTENTICACIÓN
+  // ==========================================
 
   static const String loginEndpoint =
       '/api/auth/login';
@@ -40,9 +44,9 @@ class ApiConfig {
   static const String meEndpoint =
       '/api/auth/me';
 
-  // =========================================================
+  // ==========================================
   // ENDPOINTS DE MASCOTAS
-  // =========================================================
+  // ==========================================
 
   static const String petsEndpoint =
       '/api/pets';

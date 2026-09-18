@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../services/secure_storage_service.dart';
 import 'login_screen.dart';
 import 'pets_screen.dart';
+import 'reminders_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -51,18 +52,14 @@ class HomeScreen extends StatelessWidget {
     }
 
     try {
-      // Eliminar el token de sesión seguro.
       await SecureStorageService.instance.eliminarSesion();
 
-      // Eliminar completamente la base de datos local.
       await DatabaseService.instance.eliminarBaseDatos();
 
       if (!context.mounted) {
         return;
       }
 
-      // Regresar al Login y eliminar las pantallas anteriores
-      // de la pila de navegación.
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -86,6 +83,38 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
+  void _abrirMascotas(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PetsScreen(),
+      ),
+    );
+  }
+
+  void _abrirRecordatorios(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RemindersScreen(),
+      ),
+    );
+  }
+
+  void _mostrarProximamente(
+    BuildContext context,
+    String seccion,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'La sección "$seccion" será implementada en el siguiente paso.',
+        ),
+        backgroundColor: Colors.teal,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,7 +133,6 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         centerTitle: true,
-
         actions: [
           IconButton(
             tooltip: 'Cerrar sesión',
@@ -123,7 +151,6 @@ class HomeScreen extends StatelessWidget {
       // =====================================================
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -164,12 +191,7 @@ class HomeScreen extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PetsScreen(),
-                    ),
-                  );
+                  _abrirMascotas(context);
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -187,9 +209,7 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.teal,
                         ),
                       ),
-
                       const SizedBox(width: 18),
-
                       const Expanded(
                         child: Column(
                           crossAxisAlignment:
@@ -202,11 +222,10 @@ class HomeScreen extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-
                             SizedBox(height: 5),
-
                             Text(
-                              'Registra y administra la información de tus mascotas.',
+                              'Registra y administra la información '
+                              'de tus mascotas.',
                               style: TextStyle(
                                 color: Colors.black54,
                               ),
@@ -214,7 +233,6 @@ class HomeScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-
                       const Icon(
                         Icons.arrow_forward_ios,
                         size: 18,
@@ -239,17 +257,10 @@ class HomeScreen extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'La sección de recordatorios estará disponible próximamente.',
-                      ),
-                    ),
-                  );
+                  _abrirRecordatorios(context);
                 },
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(15),
-
                   leading: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -261,7 +272,6 @@ class HomeScreen extends StatelessWidget {
                       color: Colors.orange,
                     ),
                   ),
-
                   title: const Text(
                     'Recordatorios',
                     style: TextStyle(
@@ -269,11 +279,9 @@ class HomeScreen extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
-
                   subtitle: const Text(
                     'Vacunas, desparasitación y citas veterinarias.',
                   ),
-
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
                     size: 18,
@@ -295,17 +303,13 @@ class HomeScreen extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'La sección de citas veterinarias estará disponible próximamente.',
-                      ),
-                    ),
+                  _mostrarProximamente(
+                    context,
+                    'Citas veterinarias',
                   );
                 },
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(15),
-
                   leading: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -317,7 +321,6 @@ class HomeScreen extends StatelessWidget {
                       color: Colors.blue,
                     ),
                   ),
-
                   title: const Text(
                     'Citas veterinarias',
                     style: TextStyle(
@@ -325,11 +328,9 @@ class HomeScreen extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
-
                   subtitle: const Text(
                     'Consulta y organiza las próximas citas.',
                   ),
-
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
                     size: 18,
@@ -351,17 +352,13 @@ class HomeScreen extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'La sección de salud estará disponible próximamente.',
-                      ),
-                    ),
+                  _mostrarProximamente(
+                    context,
+                    'Salud de mi mascota',
                   );
                 },
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(15),
-
                   leading: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -373,7 +370,6 @@ class HomeScreen extends StatelessWidget {
                       color: Colors.red,
                     ),
                   ),
-
                   title: const Text(
                     'Salud de mi mascota',
                     style: TextStyle(
@@ -381,11 +377,9 @@ class HomeScreen extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
-
                   subtitle: const Text(
                     'Consulta el historial y datos importantes.',
                   ),
-
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
                     size: 18,
@@ -402,21 +396,13 @@ class HomeScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               height: 52,
-
               child: ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PetsScreen(),
-                    ),
-                  );
+                  _abrirMascotas(context);
                 },
-
                 icon: const Icon(
                   Icons.add,
                 ),
-
                 label: const Text(
                   'Agregar mascota',
                   style: TextStyle(
@@ -424,11 +410,9 @@ class HomeScreen extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal,
                   foregroundColor: Colors.white,
-
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -446,26 +430,45 @@ class HomeScreen extends StatelessWidget {
       // =====================================================
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
-
         selectedItemColor: Colors.teal,
         unselectedItemColor: Colors.grey,
+
+        onTap: (index) {
+          if (index == 0) {
+            return;
+          }
+
+          if (index == 1) {
+            _abrirMascotas(context);
+            return;
+          }
+
+          if (index == 2) {
+            _abrirRecordatorios(context);
+            return;
+          }
+
+          if (index == 3) {
+            _mostrarProximamente(
+              context,
+              'Perfil',
+            );
+          }
+        },
 
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Inicio',
           ),
-
           BottomNavigationBarItem(
             icon: Icon(Icons.pets),
             label: 'Mascotas',
           ),
-
           BottomNavigationBarItem(
             icon: Icon(Icons.notifications),
             label: 'Recordatorios',
           ),
-
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: 'Perfil',

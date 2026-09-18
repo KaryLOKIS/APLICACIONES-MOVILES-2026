@@ -11,10 +11,6 @@ class PetRemoteDataSource {
 
   final ApiClient _apiClient;
 
-  // ==========================================================
-  // OBTENER MASCOTAS DESDE EL SERVIDOR
-  // ==========================================================
-
   Future<List<Pet>> obtenerMascotas() async {
     try {
       final response = await _apiClient.dio.get(
@@ -22,12 +18,6 @@ class PetRemoteDataSource {
       );
 
       final data = response.data;
-
-      // El backend responde:
-      // {
-      //   "datos": [...],
-      //   "total": 1
-      // }
 
       if (data is! Map) {
         throw Exception(
@@ -45,8 +35,10 @@ class PetRemoteDataSource {
 
       return listaMascotas
           .map(
-            (item) => Pet.fromMap(
-              Map<String, dynamic>.from(item as Map),
+            (item) => Pet.fromJson(
+              Map<String, dynamic>.from(
+                item as Map,
+              ),
             ),
           )
           .toList();
@@ -55,33 +47,14 @@ class PetRemoteDataSource {
     }
   }
 
-  // ==========================================================
-  // CREAR MASCOTA EN EL SERVIDOR
-  // ==========================================================
-
   Future<Pet> crearMascota(Pet pet) async {
     try {
       final response = await _apiClient.dio.post(
         ApiConfig.petsEndpoint,
-        data: {
-          'id': pet.id,
-          'nombre': pet.nombre,
-          'especie': pet.especie,
-          'raza': pet.raza,
-          'edad': pet.edad,
-        },
+        data: pet.toJson(),
       );
 
       final data = response.data;
-
-      // El backend responde:
-      // {
-      //   "mensaje": "...",
-      //   "datos": {
-      //      ...
-      //   },
-      //   "idempotente": false
-      // }
 
       if (data is! Map) {
         throw Exception(
@@ -97,17 +70,13 @@ class PetRemoteDataSource {
         );
       }
 
-      return Pet.fromMap(
+      return Pet.fromJson(
         Map<String, dynamic>.from(mascotaData),
       );
     } on DioException {
       rethrow;
     }
   }
-
-  // ==========================================================
-  // ELIMINAR MASCOTA
-  // ==========================================================
 
   Future<void> eliminarMascota(String id) async {
     try {
