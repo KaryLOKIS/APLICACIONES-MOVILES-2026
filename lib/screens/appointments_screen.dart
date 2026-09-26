@@ -11,15 +11,16 @@ class AppointmentsScreen extends StatefulWidget {
       _AppointmentsScreenState();
 }
 
-class _AppointmentsScreenState extends State<AppointmentsScreen> {
+class _AppointmentsScreenState
+    extends State<AppointmentsScreen> {
   final DatabaseService _databaseService =
       DatabaseService.instance;
 
   List<Map<String, dynamic>> _citas = [];
   List<Pet> _mascotas = [];
+  List<Map<String, dynamic>> _veterinarios = [];
 
   bool _cargando = true;
-  bool _cargandoMascotas = true;
 
   @override
   void initState() {
@@ -27,89 +28,74 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     _cargarDatos();
   }
 
-  Future<void> _cargarDatos() async {
-    await Future.wait([
-      _cargarCitas(),
-      _cargarMascotas(),
-    ]);
-  }
+  // =========================================================
+  // CARGAR CITAS, MASCOTAS Y VETERINARIOS
+  // =========================================================
 
-  Future<void> _cargarCitas() async {
+  Future<void> _cargarDatos() async {
     try {
       final citas =
           await _databaseService.obtenerCitasVeterinarias();
 
-      if (!mounted) return;
-
-      setState(() {
-        _citas = citas;
-        _cargando = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _cargando = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'No se pudieron cargar las citas: $e',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _cargarMascotas() async {
-    try {
       final mascotas =
           await _databaseService.obtenerMascotas();
 
-      if (!mounted) return;
+      final veterinarios =
+          await _databaseService.obtenerVeterinarios();
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _mascotas = mascotas
-            .where((mascota) => !mascota.deleted)
-            .toList();
-
-        _cargandoMascotas = false;
+        _citas = citas;
+        _mascotas = mascotas;
+        _veterinarios = veterinarios;
+        _cargando = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _cargandoMascotas = false;
+        _cargando = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: Colors.red.shade700,
           content: Text(
-            'No se pudieron cargar las mascotas: $e',
+            'No se pudieron cargar los datos: $e',
           ),
         ),
       );
     }
   }
 
+  // =========================================================
+  // ABRIR FORMULARIO
+  // =========================================================
+
   Future<void> _mostrarFormularioCita() async {
-    if (_cargandoMascotas) {
+    if (_mascotas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Espera un momento mientras se cargan tus mascotas.',
+        SnackBar(
+          backgroundColor: Colors.orange.shade700,
+          content: const Text(
+            'Primero debes registrar al menos una mascota.',
           ),
         ),
       );
       return;
     }
 
-    if (_mascotas.isEmpty) {
+    if (_veterinarios.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Primero debes registrar al menos una mascota.',
+        SnackBar(
+          backgroundColor: Colors.orange.shade700,
+          content: const Text(
+            'Primero debes registrar al menos un veterinario.',
           ),
         ),
       );
@@ -122,11 +108,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       builder: (dialogContext) {
         return _FormularioCitaDialog(
           mascotas: _mascotas,
+          veterinarios: _veterinarios,
         );
       },
     );
 
-    if (resultado == null) return;
+    if (resultado == null) {
+      return;
+    }
 
     try {
       await _databaseService.insertarCitaVeterinaria(
@@ -138,57 +127,70 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         hora: resultado['hora'] as String,
       );
 
-      await _cargarCitas();
+      await _cargarDatos();
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cita veterinaria guardada correctamente.',
-          ),
-          backgroundColor: Colors.teal,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: Colors.teal.shade700,
+          content: const Text(
+            'Cita veterinaria registrada correctamente.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
           content: Text(
             'No se pudo guardar la cita: $e',
           ),
-          backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  // =========================================================
+  // ELIMINAR CITA
+  // =========================================================
+
   Future<void> _eliminarCita(
     Map<String, dynamic> cita,
   ) async {
-    final confirmar =
-        await showDialog<bool>(
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
           ),
           title: const Text(
             'Eliminar cita',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: Text(
             '¿Deseas eliminar la cita de '
-            '${cita['mascota']}?',
+            '${cita['mascota'] ?? 'la mascota'}?',
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
+              child: Text(
                 'Cancelar',
+                style: TextStyle(
+                  color: Colors.teal.shade700,
+                ),
               ),
             ),
             ElevatedButton(
@@ -196,65 +198,109 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                 Navigator.of(dialogContext).pop(true);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Eliminar',
-              ),
+              child: const Text('Eliminar'),
             ),
           ],
         );
       },
     );
 
-    if (confirmar != true) return;
+    if (confirmar != true) {
+      return;
+    }
 
     try {
       await _databaseService.eliminarCitaVeterinaria(
         cita['id'] as String,
       );
 
-      await _cargarCitas();
+      await _cargarDatos();
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cita eliminada correctamente.',
-          ),
-          backgroundColor: Colors.teal,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: Colors.teal.shade700,
+          content: const Text(
+            'Cita eliminada correctamente.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
           content: Text(
             'No se pudo eliminar la cita: $e',
           ),
-          backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  // =========================================================
+  // FORMATO DE FECHA
+  // =========================================================
+
+  String _formatearFecha(String fecha) {
+    try {
+      final partes = fecha.split('-');
+
+      if (partes.length == 3) {
+        return '${partes[2]}/${partes[1]}/${partes[0]}';
+      }
+
+      return fecha;
+    } catch (_) {
+      return fecha;
+    }
+  }
+
+  // =========================================================
+  // TARJETA DE CITA
+  // =========================================================
+
   Widget _crearTarjetaCita(
     Map<String, dynamic> cita,
   ) {
+    final mascota =
+        cita['mascota']?.toString() ?? 'Sin mascota';
+
+    final veterinario =
+        cita['veterinario']?.toString() ??
+            'Sin veterinario';
+
+    final motivo =
+        cita['motivo']?.toString() ??
+            'Consulta veterinaria';
+
+    final fecha =
+        cita['fecha']?.toString() ?? '';
+
+    final hora =
+        cita['hora']?.toString() ?? '';
+
     return Card(
-      elevation: 2,
+      elevation: 3,
       margin: const EdgeInsets.only(
         bottom: 14,
       ),
+      color: Colors.white,
+      shadowColor: Colors.black26,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
       ),
-      color: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -262,57 +308,124 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: Colors.teal.shade50,
-                    borderRadius:
-                        BorderRadius.circular(12),
+                    shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.event_available,
-                    color: Colors.teal,
+                  child: Icon(
+                    Icons.calendar_month,
+                    color: Colors.teal.shade700,
+                    size: 28,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
-                  child: Text(
-                    cita['motivo'] as String,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        mascota,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF263238),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        motivo,
+                        style: TextStyle(
+                          color: Colors.teal.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () =>
-                      _eliminarCita(cita),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                  ),
+                PopupMenuButton<String>(
+                  onSelected: (opcion) {
+                    if (opcion == 'eliminar') {
+                      _eliminarCita(cita);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(
+                      value: 'eliminar',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 10),
+                          Text('Eliminar'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            _datoCita(
-              Icons.pets,
-              'Mascota',
-              cita['mascota'] as String,
+            Divider(
+              color: Colors.grey.shade200,
             ),
-            _datoCita(
-              Icons.medical_services_outlined,
-              'Veterinario',
-              cita['veterinario'] as String,
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.medical_services_outlined,
+                  size: 20,
+                  color: Colors.teal.shade600,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    veterinario,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            _datoCita(
-              Icons.calendar_today,
-              'Fecha',
-              cita['fecha'] as String,
-            ),
-            _datoCita(
-              Icons.access_time,
-              'Hora',
-              cita['hora'] as String,
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.event_outlined,
+                  size: 20,
+                  color: Colors.teal.shade600,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _formatearFecha(fecha),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Icon(
+                  Icons.access_time,
+                  size: 20,
+                  color: Colors.teal.shade600,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  hora,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -320,39 +433,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     );
   }
 
-  Widget _datoCita(
-    IconData icono,
-    String titulo,
-    String valor,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 8,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            icono,
-            size: 20,
-            color: Colors.teal.shade700,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            '$titulo: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              valor,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // =========================================================
+  // BUILD
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
@@ -362,10 +445,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           'Citas veterinarias',
           style: TextStyle(
             fontWeight: FontWeight.bold,
+            fontSize: 20,
           ),
         ),
       ),
@@ -375,91 +460,105 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                 color: Colors.teal,
               ),
             )
-          : RefreshIndicator(
-              color: Colors.teal,
-              onRefresh: _cargarDatos,
-              child: _citas.isEmpty
-                  ? ListView(
-                      physics:
-                          const AlwaysScrollableScrollPhysics(),
+          : _citas.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(30),
+                    child: Column(
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
                       children: [
-                        SizedBox(
-                          height:
-                              MediaQuery.of(context)
-                                      .size
-                                      .height *
-                                  0.25,
+                        Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.calendar_today,
+                            size: 45,
+                            color: Colors.teal.shade400,
+                          ),
                         ),
-                        const Icon(
-                          Icons.event_note,
-                          size: 80,
-                          color: Colors.teal,
-                        ),
-                        const SizedBox(height: 16),
-                        const Center(
-                          child: Text(
-                            'No tienes citas registradas',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'No tienes citas registradas',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF263238),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Center(
-                          child: Padding(
-                            padding:
-                                EdgeInsets.symmetric(
-                              horizontal: 30,
-                            ),
-                            child: Text(
-                              'Agrega una cita veterinaria '
-                              'para llevar el control de '
-                              'la salud de tu mascota.',
-                              textAlign:
-                                  TextAlign.center,
-                            ),
+                        const Text(
+                          'Registra una cita para llevar '
+                          'un mejor control de la salud '
+                          'de tus mascotas.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.4,
+                            color: Colors.black54,
                           ),
                         ),
                       ],
-                    )
-                  : ListView.builder(
-                      padding:
-                          const EdgeInsets.all(16),
-                      itemCount: _citas.length,
-                      itemBuilder:
-                          (context, index) {
-                        return _crearTarjetaCita(
-                          _citas[index],
-                        );
-                      },
                     ),
-            ),
-      floatingActionButton:
-          FloatingActionButton.extended(
+                  ),
+                )
+              : RefreshIndicator(
+                  color: Colors.teal,
+                  onRefresh: _cargarDatos,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(
+                      14,
+                      18,
+                      14,
+                      100,
+                    ),
+                    itemCount: _citas.length,
+                    itemBuilder: (context, index) {
+                      return _crearTarjetaCita(
+                        _citas[index],
+                      );
+                    },
+                  ),
+                ),
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _mostrarFormularioCita,
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text(
           'Nueva cita',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
   }
 }
 
-// ============================================================
-// FORMULARIO DE NUEVA CITA
-// ============================================================
+// ===========================================================
+// FORMULARIO DE CITA
+// ===========================================================
 
 class _FormularioCitaDialog extends StatefulWidget {
-  final List<Pet> mascotas;
-
   const _FormularioCitaDialog({
     required this.mascotas,
+    required this.veterinarios,
   });
+
+  final List<Pet> mascotas;
+  final List<Map<String, dynamic>> veterinarios;
 
   @override
   State<_FormularioCitaDialog> createState() =>
@@ -471,10 +570,11 @@ class _FormularioCitaDialogState
   final TextEditingController _motivoController =
       TextEditingController();
 
-  String? _mascotaSeleccionadaId;
+  String? _mascotaSeleccionada;
   String? _veterinarioSeleccionado;
-  String? _fechaSeleccionada;
-  String? _horaSeleccionada;
+
+  DateTime? _fechaSeleccionada;
+  TimeOfDay? _horaSeleccionada;
 
   @override
   void dispose() {
@@ -482,19 +582,25 @@ class _FormularioCitaDialogState
     super.dispose();
   }
 
+  // =========================================================
+  // SELECCIONAR FECHA
+  // =========================================================
+
   Future<void> _seleccionarFecha() async {
+    final ahora = DateTime.now();
+
     final fecha = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
+      initialDate: _fechaSeleccionada ?? ahora,
+      firstDate: ahora,
       lastDate: DateTime(
-        DateTime.now().year + 5,
+        ahora.year + 5,
       ),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.teal,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.teal,
             ),
           ),
           child: child!,
@@ -502,25 +608,28 @@ class _FormularioCitaDialogState
       },
     );
 
-    if (fecha == null) return;
-
-    setState(() {
-      _fechaSeleccionada =
-          '${fecha.day.toString().padLeft(2, '0')}/'
-          '${fecha.month.toString().padLeft(2, '0')}/'
-          '${fecha.year}';
-    });
+    if (fecha != null) {
+      setState(() {
+        _fechaSeleccionada = fecha;
+      });
+    }
   }
+
+  // =========================================================
+  // SELECCIONAR HORA
+  // =========================================================
 
   Future<void> _seleccionarHora() async {
     final hora = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialTime:
+          _horaSeleccionada ??
+              TimeOfDay.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.teal,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.teal,
             ),
           ),
           child: child!,
@@ -528,15 +637,19 @@ class _FormularioCitaDialogState
       },
     );
 
-    if (hora == null) return;
-
-    setState(() {
-      _horaSeleccionada = hora.format(context);
-    });
+    if (hora != null) {
+      setState(() {
+        _horaSeleccionada = hora;
+      });
+    }
   }
 
+  // =========================================================
+  // GUARDAR
+  // =========================================================
+
   void _guardar() {
-    if (_mascotaSeleccionadaId == null) {
+    if (_mascotaSeleccionada == null) {
       _mostrarMensaje(
         'Selecciona una mascota.',
       );
@@ -571,57 +684,94 @@ class _FormularioCitaDialogState
       return;
     }
 
-    final mascota =
-        widget.mascotas.firstWhere(
-      (pet) =>
-          pet.id == _mascotaSeleccionadaId,
+    final mascota = widget.mascotas.firstWhere(
+      (pet) => pet.id == _mascotaSeleccionada,
     );
 
-    Navigator.of(context).pop({
-      'mascota': mascota.nombre,
-      'veterinario':
+    final veterinario =
+        widget.veterinarios.firstWhere(
+      (vet) =>
+          vet['id']?.toString() ==
           _veterinarioSeleccionado,
-      'motivo':
-          _motivoController.text.trim(),
-      'fecha': _fechaSeleccionada,
-      'hora': _horaSeleccionada,
-    });
+    );
+
+    final fecha = _fechaSeleccionada!;
+
+    final fechaTexto =
+        '${fecha.year.toString().padLeft(4, '0')}-'
+        '${fecha.month.toString().padLeft(2, '0')}-'
+        '${fecha.day.toString().padLeft(2, '0')}';
+
+    final hora = _horaSeleccionada!;
+
+    final horaTexto =
+        '${hora.hour.toString().padLeft(2, '0')}:'
+        '${hora.minute.toString().padLeft(2, '0')}';
+
+    Navigator.of(context).pop(
+      {
+        'mascota': mascota.nombre,
+        'veterinario':
+            veterinario['nombre']?.toString() ?? '',
+        'motivo':
+            _motivoController.text.trim(),
+        'fecha': fechaTexto,
+        'hora': horaTexto,
+      },
+    );
   }
 
   void _mostrarMensaje(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(mensaje),
         backgroundColor: Colors.orange.shade700,
+        content: Text(mensaje),
       ),
     );
   }
 
+  // =========================================================
+  // FORMATO FECHA PARA MOSTRAR
+  // =========================================================
+
+  String _textoFecha() {
+    if (_fechaSeleccionada == null) {
+      return 'Seleccionar fecha';
+    }
+
+    final fecha = _fechaSeleccionada!;
+
+    return '${fecha.day.toString().padLeft(2, '0')}/'
+        '${fecha.month.toString().padLeft(2, '0')}/'
+        '${fecha.year}';
+  }
+
+  // =========================================================
+  // BUILD DEL DIALOG
+  // =========================================================
+
   @override
   Widget build(BuildContext context) {
-    final mascotaSeleccionada =
-        _mascotaSeleccionadaId == null
-            ? null
-            : widget.mascotas.firstWhere(
-                (pet) =>
-                    pet.id ==
-                    _mascotaSeleccionadaId,
-              );
-
     return AlertDialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
       ),
-      title: const Row(
+      title: Row(
         children: [
           Icon(
-            Icons.event_available,
-            color: Colors.teal,
+            Icons.calendar_month,
+            color: Colors.teal.shade700,
           ),
-          SizedBox(width: 10),
-          Expanded(
+          const SizedBox(width: 10),
+          const Expanded(
             child: Text(
               'Nueva cita veterinaria',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
             ),
           ),
         ],
@@ -630,212 +780,160 @@ class _FormularioCitaDialogState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // --------------------------------------------------
+            // =================================================
             // MASCOTA
-            // --------------------------------------------------
+            // =================================================
+
             DropdownButtonFormField<String>(
-              initialValue:
-                  _mascotaSeleccionadaId,
+              initialValue: _mascotaSeleccionada,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Mascota',
-                hintText:
-                    'Selecciona una mascota',
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.pets,
-                  color: Colors.teal,
+                  color: Colors.teal.shade700,
                 ),
+                filled: true,
+                fillColor: Colors.teal.shade50,
                 border: OutlineInputBorder(
                   borderRadius:
                       BorderRadius.circular(14),
-                ),
-                focusedBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(14),
-                  borderSide:
-                      const BorderSide(
-                    color: Colors.teal,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide.none,
                 ),
               ),
-              items: widget.mascotas.map(
-                (mascota) {
-                  return DropdownMenuItem<String>(
-                    value: mascota.id,
-                    child: Text(
-                      '${mascota.nombre} · '
-                      '${mascota.especie}',
-                      overflow:
-                          TextOverflow.ellipsis,
-                    ),
-                  );
-                },
-              ).toList(),
-              onChanged: (value) {
+              items: widget.mascotas.map((pet) {
+                return DropdownMenuItem<String>(
+                  value: pet.id,
+                  child: Text(
+                    '${pet.nombre} · ${pet.especie}',
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (valor) {
                 setState(() {
-                  _mascotaSeleccionadaId =
-                      value;
+                  _mascotaSeleccionada = valor;
                 });
               },
             ),
 
-            // --------------------------------------------------
-            // INFORMACIÓN DE LA MASCOTA
-            // --------------------------------------------------
-            if (mascotaSeleccionada != null)
-              Container(
-                width: double.infinity,
-                margin:
-                    const EdgeInsets.only(
-                  top: 10,
-                ),
-                padding:
-                    const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius:
-                      BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color:
-                          Colors.teal.shade700,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '${mascotaSeleccionada.nombre} · '
-                        '${mascotaSeleccionada.raza} · '
-                        '${mascotaSeleccionada.edad} años',
-                        style: TextStyle(
-                          color:
-                              Colors.teal.shade800,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 14),
 
-            const SizedBox(height: 16),
+            // =================================================
+            // VETERINARIO DESDE SQLITE
+            // =================================================
 
-            // --------------------------------------------------
-            // VETERINARIO
-            // --------------------------------------------------
             DropdownButtonFormField<String>(
               initialValue:
                   _veterinarioSeleccionado,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Veterinario',
-                hintText:
-                    'Selecciona un veterinario',
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.medical_services,
-                  color: Colors.teal,
+                  color: Colors.teal.shade700,
                 ),
+                filled: true,
+                fillColor: Colors.teal.shade50,
                 border: OutlineInputBorder(
                   borderRadius:
                       BorderRadius.circular(14),
-                ),
-                focusedBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(14),
-                  borderSide:
-                      const BorderSide(
-                    color: Colors.teal,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide.none,
                 ),
               ),
-              items: const [
-                DropdownMenuItem<String>(
-                  value:
-                      'Dr. Carlos Mendoza',
+              items:
+                  widget.veterinarios.map((vet) {
+                final nombre =
+                    vet['nombre']?.toString() ?? '';
+
+                final especialidad =
+                    vet['especialidad']
+                            ?.toString() ??
+                        '';
+
+                return DropdownMenuItem<String>(
+                  value: vet['id']?.toString(),
                   child: Text(
-                    'Dr. Carlos Mendoza',
+                    especialidad.isEmpty
+                        ? nombre
+                        : '$nombre · $especialidad',
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                DropdownMenuItem<String>(
-                  value:
-                      'Dra. Ana Torres',
-                  child: Text(
-                    'Dra. Ana Torres',
-                  ),
-                ),
-                DropdownMenuItem<String>(
-                  value:
-                      'Dr. Miguel Rodríguez',
-                  child: Text(
-                    'Dr. Miguel Rodríguez',
-                  ),
-                ),
-              ],
-              onChanged: (value) {
+                );
+              }).toList(),
+              onChanged: (valor) {
                 setState(() {
                   _veterinarioSeleccionado =
-                      value;
+                      valor;
                 });
               },
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // --------------------------------------------------
+            // =================================================
             // MOTIVO
-            // --------------------------------------------------
+            // =================================================
+
             TextField(
-              controller:
-                  _motivoController,
+              controller: _motivoController,
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'Motivo de la cita',
                 hintText:
-                    'Ej. Vacunación, revisión, control...',
-                prefixIcon: const Icon(
+                    'Ej. Vacunación, control, revisión...',
+                prefixIcon: Icon(
                   Icons.description_outlined,
-                  color: Colors.teal,
+                  color: Colors.teal.shade700,
                 ),
+                filled: true,
+                fillColor: Colors.teal.shade50,
                 border: OutlineInputBorder(
                   borderRadius:
                       BorderRadius.circular(14),
-                ),
-                focusedBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(14),
-                  borderSide:
-                      const BorderSide(
-                    color: Colors.teal,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // --------------------------------------------------
+            // =================================================
             // FECHA
-            // --------------------------------------------------
+            // =================================================
+
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed:
-                    _seleccionarFecha,
-                icon: const Icon(
-                  Icons.calendar_today,
-                  color: Colors.teal,
+                onPressed: _seleccionarFecha,
+                icon: Icon(
+                  Icons.event,
+                  color: Colors.teal.shade700,
                 ),
                 label: Text(
-                  _fechaSeleccionada ??
-                      'Seleccionar fecha',
-                  style: const TextStyle(
-                    color: Colors.teal,
+                  _textoFecha(),
+                  style: TextStyle(
+                    color: Colors.teal.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style:
+                    OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 14,
+                  ),
+                  side: BorderSide(
+                    color: Colors.teal.shade200,
+                  ),
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(14),
                   ),
                 ),
               ),
@@ -843,23 +941,41 @@ class _FormularioCitaDialogState
 
             const SizedBox(height: 10),
 
-            // --------------------------------------------------
+            // =================================================
             // HORA
-            // --------------------------------------------------
+            // =================================================
+
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed:
-                    _seleccionarHora,
-                icon: const Icon(
+                onPressed: _seleccionarHora,
+                icon: Icon(
                   Icons.access_time,
-                  color: Colors.teal,
+                  color: Colors.teal.shade700,
                 ),
                 label: Text(
-                  _horaSeleccionada ??
-                      'Seleccionar hora',
-                  style: const TextStyle(
-                    color: Colors.teal,
+                  _horaSeleccionada == null
+                      ? 'Seleccionar hora'
+                      : _horaSeleccionada!
+                          .format(context),
+                  style: TextStyle(
+                    color: Colors.teal.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style:
+                    OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 14,
+                  ),
+                  side: BorderSide(
+                    color: Colors.teal.shade200,
+                  ),
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(14),
                   ),
                 ),
               ),
@@ -867,15 +983,21 @@ class _FormularioCitaDialogState
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        18,
+        0,
+        18,
+        16,
+      ),
       actions: [
         TextButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(
-              color: Colors.grey,
+              color: Colors.grey.shade700,
             ),
           ),
         ),
@@ -886,9 +1008,14 @@ class _FormularioCitaDialogState
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 12,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius:
-                  BorderRadius.circular(12),
+                  BorderRadius.circular(14),
             ),
           ),
         ),

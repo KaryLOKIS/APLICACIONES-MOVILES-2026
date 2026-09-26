@@ -49,7 +49,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -164,41 +164,7 @@ class DatabaseService {
     ''');
 
     // =======================================================
-    // TABLA DE VACUNAS
-    // =======================================================
-
-    await db.execute('''
-      CREATE TABLE vaccines (
-        id TEXT PRIMARY KEY,
-        pet_id TEXT NOT NULL,
-        vacuna TEXT NOT NULL,
-        fecha_aplicacion TEXT NOT NULL,
-        proxima_dosis TEXT,
-        veterinario TEXT NOT NULL,
-        observaciones TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    ''');
-
-    // =======================================================
-    // TABLA DE DESPARASITACIONES
-    // =======================================================
-
-    await db.execute('''
-      CREATE TABLE dewormings (
-        id TEXT PRIMARY KEY,
-        pet_id TEXT NOT NULL,
-        tipo TEXT NOT NULL,
-        fecha_aplicacion TEXT NOT NULL,
-        proxima_dosis TEXT,
-        veterinario TEXT NOT NULL,
-        observaciones TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    ''');
-
-    // =======================================================
-    // VETERINARIOS DE DEMOSTRACIÓN
+    // VETERINARIOS DE DEMOSTRACION
     // =======================================================
 
     await _insertarVeterinariosIniciales(db);
@@ -210,16 +176,6 @@ class DatabaseService {
     print(
       'PETCARE DIAGNOSTICO: '
       'VETERINARIOS INICIALES CREADOS',
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'TABLA VACCINES CREADA',
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'TABLA DEWORMINGS CREADA',
     );
   }
 
@@ -381,56 +337,6 @@ class DatabaseService {
       print(
         'PETCARE DIAGNOSTICO: '
         'VETERINARIOS INICIALES CREADOS',
-      );
-    }
-
-    // =======================================================
-    // VERSION 6
-    // Agrega tabla vaccines
-    // =======================================================
-
-    if (oldVersion < 6) {
-      await db.execute('''
-        CREATE TABLE vaccines (
-          id TEXT PRIMARY KEY,
-          pet_id TEXT NOT NULL,
-          vacuna TEXT NOT NULL,
-          fecha_aplicacion TEXT NOT NULL,
-          proxima_dosis TEXT,
-          veterinario TEXT NOT NULL,
-          observaciones TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        )
-      ''');
-
-      print(
-        'PETCARE DIAGNOSTICO: TABLA VACCINES '
-        'CREADA EN MIGRACION',
-      );
-    }
-
-    // =======================================================
-    // VERSION 7
-    // Agrega tabla dewormings
-    // =======================================================
-
-    if (oldVersion < 7) {
-      await db.execute('''
-        CREATE TABLE dewormings (
-          id TEXT PRIMARY KEY,
-          pet_id TEXT NOT NULL,
-          tipo TEXT NOT NULL,
-          fecha_aplicacion TEXT NOT NULL,
-          proxima_dosis TEXT,
-          veterinario TEXT NOT NULL,
-          observaciones TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        )
-      ''');
-
-      print(
-        'PETCARE DIAGNOSTICO: TABLA DEWORMINGS '
-        'CREADA EN MIGRACION',
       );
     }
   }
@@ -1070,390 +976,6 @@ class DatabaseService {
   }
 
   // =========================================================
-  // INSERTAR VACUNA
-  // =========================================================
-
-  Future<void> insertarVacuna({
-    required String petId,
-    required String vacuna,
-    required String fechaAplicacion,
-    String? proximaDosis,
-    required String veterinario,
-    required String observaciones,
-  }) async {
-    final db = await database;
-
-    await db.insert(
-      'vaccines',
-      {
-        'id': _uuid.v4(),
-        'pet_id': petId,
-        'vacuna': vacuna.trim(),
-        'fecha_aplicacion': fechaAplicacion,
-        'proxima_dosis': proximaDosis,
-        'veterinario': veterinario.trim(),
-        'observaciones': observaciones.trim(),
-        'created_at':
-            DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm:
-          ConflictAlgorithm.abort,
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'VACUNA GUARDADA PARA MASCOTA = $petId',
-    );
-  }
-
-  // =========================================================
-  // OBTENER VACUNAS DE UNA MASCOTA
-  // =========================================================
-
-  Future<List<Map<String, dynamic>>>
-      obtenerVacunasPorMascota(
-    String petId,
-  ) async {
-    try {
-      final db = await database;
-
-      final resultados = await db.query(
-        'vaccines',
-        where: 'pet_id = ?',
-        whereArgs: [petId],
-        orderBy:
-            'fecha_aplicacion DESC, created_at DESC',
-      );
-
-      final vacunas =
-          resultados
-              .map(
-                (vacuna) =>
-                    Map<String, dynamic>.from(
-                  vacuna,
-                ),
-              )
-              .toList();
-
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'VACUNAS DE MASCOTA $petId = '
-        '${vacunas.length}',
-      );
-
-      return vacunas;
-    } catch (e) {
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'ERROR AL OBTENER VACUNAS: $e',
-      );
-
-      rethrow;
-    }
-  }
-
-  // =========================================================
-  // ACTUALIZAR VACUNA
-  // =========================================================
-
-  Future<void> actualizarVacuna({
-    required String id,
-    required String petId,
-    required String vacuna,
-    required String fechaAplicacion,
-    String? proximaDosis,
-    required String veterinario,
-    required String observaciones,
-  }) async {
-    final db = await database;
-
-    await db.update(
-      'vaccines',
-      {
-        'pet_id': petId,
-        'vacuna': vacuna.trim(),
-        'fecha_aplicacion': fechaAplicacion,
-        'proxima_dosis': proximaDosis,
-        'veterinario': veterinario.trim(),
-        'observaciones': observaciones.trim(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'VACUNA ACTUALIZADA = $id',
-    );
-  }
-
-  // =========================================================
-  // ELIMINAR VACUNA
-  // =========================================================
-
-  Future<void> eliminarVacuna(
-    String id,
-  ) async {
-    final db = await database;
-
-    await db.delete(
-      'vaccines',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'VACUNA ELIMINADA = $id',
-    );
-  }
-
-  // =========================================================
-  // OBTENER TODAS LAS VACUNAS
-  // =========================================================
-
-  Future<List<Map<String, dynamic>>>
-      obtenerTodasLasVacunas() async {
-    try {
-      final db = await database;
-
-      final resultados = await db.query(
-        'vaccines',
-        orderBy:
-            'fecha_aplicacion DESC, created_at DESC',
-      );
-
-      return resultados
-          .map(
-            (vacuna) =>
-                Map<String, dynamic>.from(
-              vacuna,
-            ),
-          )
-          .toList();
-    } catch (e) {
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'ERROR AL OBTENER TODAS LAS VACUNAS: $e',
-      );
-
-      rethrow;
-    }
-  }
-
-  // =========================================================
-  // INSERTAR DESPARASITACIÓN
-  // =========================================================
-
-  Future<void> insertarDesparasitacion({
-    required String petId,
-    required String tipo,
-    required String fechaAplicacion,
-    String? proximaDosis,
-    required String veterinario,
-    required String observaciones,
-  }) async {
-    final db = await database;
-
-    await db.insert(
-      'dewormings',
-      {
-        'id': _uuid.v4(),
-        'pet_id': petId,
-        'tipo': tipo.trim(),
-        'fecha_aplicacion': fechaAplicacion,
-        'proxima_dosis': proximaDosis,
-        'veterinario': veterinario.trim(),
-        'observaciones': observaciones.trim(),
-        'created_at':
-            DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm:
-          ConflictAlgorithm.abort,
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'DESPARASITACION GUARDADA PARA MASCOTA = $petId',
-    );
-  }
-
-  // =========================================================
-  // OBTENER DESPARASITACIONES DE UNA MASCOTA
-  // =========================================================
-
-  Future<List<Map<String, dynamic>>>
-      obtenerDesparasitacionesPorMascota(
-    String petId,
-  ) async {
-    try {
-      final db = await database;
-
-      final resultados = await db.query(
-        'dewormings',
-        where: 'pet_id = ?',
-        whereArgs: [petId],
-        orderBy:
-            'fecha_aplicacion DESC, created_at DESC',
-      );
-
-      final desparasitaciones =
-          resultados
-              .map(
-                (desparasitacion) =>
-                    Map<String, dynamic>.from(
-                  desparasitacion,
-                ),
-              )
-              .toList();
-
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'DESPARASITACIONES DE MASCOTA $petId = '
-        '${desparasitaciones.length}',
-      );
-
-      return desparasitaciones;
-    } catch (e) {
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'ERROR AL OBTENER DESPARASITACIONES: $e',
-      );
-
-      rethrow;
-    }
-  }
-
-  // =========================================================
-  // ACTUALIZAR DESPARASITACIÓN
-  // =========================================================
-
-  Future<void> actualizarDesparasitacion({
-    required String id,
-    required String petId,
-    required String tipo,
-    required String fechaAplicacion,
-    String? proximaDosis,
-    required String veterinario,
-    required String observaciones,
-  }) async {
-    final db = await database;
-
-    await db.update(
-      'dewormings',
-      {
-        'pet_id': petId,
-        'tipo': tipo.trim(),
-        'fecha_aplicacion': fechaAplicacion,
-        'proxima_dosis': proximaDosis,
-        'veterinario': veterinario.trim(),
-        'observaciones': observaciones.trim(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'DESPARASITACION ACTUALIZADA = $id',
-    );
-  }
-
-  // =========================================================
-  // ELIMINAR DESPARASITACIÓN
-  // =========================================================
-
-  Future<void> eliminarDesparasitacion(
-    String id,
-  ) async {
-    final db = await database;
-
-    await db.delete(
-      'dewormings',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'DESPARASITACION ELIMINADA = $id',
-    );
-  }
-
-  // =========================================================
-  // OBTENER TODAS LAS DESPARASITACIONES
-  // =========================================================
-
-  Future<List<Map<String, dynamic>>>
-      obtenerTodasLasDesparasitaciones() async {
-    try {
-      final db = await database;
-
-      final resultados = await db.query(
-        'dewormings',
-        orderBy:
-            'fecha_aplicacion DESC, created_at DESC',
-      );
-
-      return resultados
-          .map(
-            (desparasitacion) =>
-                Map<String, dynamic>.from(
-              desparasitacion,
-            ),
-          )
-          .toList();
-    } catch (e) {
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'ERROR AL OBTENER TODAS LAS DESPARASITACIONES: $e',
-      );
-
-      rethrow;
-    }
-  }
-
-  // =========================================================
-  // DIAGNÓSTICO DE VACUNAS
-  // =========================================================
-
-  Future<void> diagnosticarVacunas() async {
-    final db = await database;
-
-    final resultado = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad FROM vaccines',
-    );
-
-    final cantidad =
-        resultado.first['cantidad'];
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'VACUNAS EN SQLITE = $cantidad',
-    );
-  }
-
-  // =========================================================
-  // DIAGNÓSTICO DE DESPARASITACIONES
-  // =========================================================
-
-  Future<void> diagnosticarDesparasitaciones() async {
-    final db = await database;
-
-    final resultado = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad FROM dewormings',
-    );
-
-    final cantidad =
-        resultado.first['cantidad'];
-
-    print(
-      'PETCARE DIAGNOSTICO: '
-      'DESPARASITACIONES EN SQLITE = $cantidad',
-    );
-  }
-
-  // =========================================================
   // DIAGNÓSTICO DE USUARIOS
   // =========================================================
 
@@ -1508,16 +1030,6 @@ class DatabaseService {
       'FROM veterinarians',
     );
 
-    final vacunas = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad '
-      'FROM vaccines',
-    );
-
-    final desparasitaciones = await db.rawQuery(
-      'SELECT COUNT(*) AS cantidad '
-      'FROM dewormings',
-    );
-
     print(
       '=====================================================',
     );
@@ -1552,16 +1064,6 @@ class DatabaseService {
     print(
       'VETERINARIOS: '
       '${veterinarios.first['cantidad']}',
-    );
-
-    print(
-      'VACUNAS: '
-      '${vacunas.first['cantidad']}',
-    );
-
-    print(
-      'DESPARASITACIONES: '
-      '${desparasitaciones.first['cantidad']}',
     );
 
     print(
@@ -1667,24 +1169,6 @@ class DatabaseService {
       print(
         'PETCARE DIAGNOSTICO: '
         'TABLA VETERINARIANS LIMPIADA',
-      );
-
-      await _database!.delete(
-        'vaccines',
-      );
-
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'TABLA VACCINES LIMPIADA',
-      );
-
-      await _database!.delete(
-        'dewormings',
-      );
-
-      print(
-        'PETCARE DIAGNOSTICO: '
-        'TABLA DEWORMINGS LIMPIADA',
       );
 
       await diagnosticarBaseDatos();

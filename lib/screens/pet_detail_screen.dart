@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'deworming_screen.dart';
+import 'vaccines_screen.dart';
+
 class PetDetailScreen extends StatelessWidget {
+  final String id;
   final String nombre;
   final String especie;
   final String raza;
@@ -8,6 +12,7 @@ class PetDetailScreen extends StatelessWidget {
 
   const PetDetailScreen({
     super.key,
+    required this.id,
     required this.nombre,
     required this.especie,
     required this.raza,
@@ -18,233 +23,215 @@ class PetDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.teal.shade50,
-
-      // ==============================
-      // BARRA SUPERIOR
-      // ==============================
       appBar: AppBar(
+        title: Text(nombre),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        centerTitle: true,
-        title: const Text(
-          'Ficha de mi mascota',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        elevation: 0,
       ),
-
-      // ==============================
-      // CONTENIDO
-      // ==============================
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            // ==============================
-            // ENCABEZADO DE LA MASCOTA
-            // ==============================
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.10),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+            // =========================
+            // INFORMACIÓN DE LA MASCOTA
+            // =========================
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
-                children: [
-
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
-                      shape: BoxShape.circle,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.pets,
+                        size: 40,
+                        color: Colors.teal.shade700,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.pets,
-                      size: 58,
-                      color: Colors.teal,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nombre,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            especie,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          Text(
+                            raza,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          Text(
+                            '$edad años',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  Text(
-                    nombre,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.teal,
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    '$especie • $raza',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
-            // ==============================
-            // INFORMACIÓN BÁSICA
-            // ==============================
-            _tituloSeccion(
-              'Información básica',
-              Icons.info_outline,
-            ),
-
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-
-                Expanded(
-                  child: _tarjetaInformacion(
-                    icono: Icons.pets,
-                    titulo: 'Especie',
-                    valor: especie,
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: _tarjetaInformacion(
-                    icono: Icons.category,
-                    titulo: 'Raza',
-                    valor: raza,
-                  ),
-                ),
-              ],
+            // =========================
+            // SALUD DE MI MASCOTA
+            // =========================
+            const Text(
+              'Salud de mi mascota',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
             ),
 
             const SizedBox(height: 12),
 
-            _tarjetaInformacion(
-              icono: Icons.cake,
-              titulo: 'Edad',
-              valor: '$edad años',
-            ),
-
-            const SizedBox(height: 25),
-
-            // ==============================
-            // SALUD
-            // ==============================
-            _tituloSeccion(
-              'Salud',
-              Icons.favorite,
-            ),
-
-            const SizedBox(height: 10),
-
+            // =========================
+            // VACUNAS
+            // =========================
             _opcionSalud(
               context: context,
               icono: Icons.vaccines,
               titulo: 'Vacunas',
-              descripcion: 'Consulta y registra las vacunas.',
-              color: Colors.blue,
+              descripcion:
+                  'Consulta y registra las vacunas de tu mascota',
+              color: Colors.teal,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VaccinesScreen(
+                      petId: id,
+                      petName: nombre,
+                    ),
+                  ),
+                );
+              },
             ),
 
-            const SizedBox(height: 12),
-
-            _opcionSalud(
-              context: context,
-              icono: Icons.medication,
-              titulo: 'Desparasitación',
-              descripcion: 'Controla las fechas de desparasitación.',
-              color: Colors.orange,
-            ),
-
-            const SizedBox(height: 12),
-
+            // =========================
+            // DESPARASITACIÓN
+            // =========================
             _opcionSalud(
               context: context,
               icono: Icons.medical_services,
+              titulo: 'Desparasitación',
+              descripcion:
+                  'Registra y consulta las desparasitaciones realizadas',
+              color: Colors.orange,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DewormingScreen(
+                      petId: id,
+                      petName: nombre,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // =========================
+            // HISTORIAL DE SALUD
+            // =========================
+            _opcionSalud(
+              context: context,
+              icono: Icons.health_and_safety,
               titulo: 'Historial de salud',
-              descripcion: 'Información médica de tu mascota.',
-              color: Colors.red,
+              descripcion:
+                  'Consulta los eventos y antecedentes médicos de tu mascota',
+              color: Colors.blue,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => _PantallaProximamente(
+                      titulo: 'Historial de salud',
+                      mensaje:
+                          'Aquí podrás consultar el historial médico de tu mascota.',
+                      petId: id,
+                    ),
+                  ),
+                );
+              },
             ),
 
-            const SizedBox(height: 25),
+            const SizedBox(height: 24),
 
-            // ==============================
-            // CUIDADOS
-            // ==============================
-            _tituloSeccion(
-              'Cuidados',
-              Icons.favorite_border,
-            ),
-
-            const SizedBox(height: 10),
-
-            _opcionSalud(
-              context: context,
-              icono: Icons.notifications,
-              titulo: 'Recordatorios',
-              descripcion: 'Próximamente podrás crear recordatorios.',
-              color: Colors.purple,
-            ),
-
-            const SizedBox(height: 12),
-
-            _opcionSalud(
-              context: context,
-              icono: Icons.calendar_month,
-              titulo: 'Citas veterinarias',
-              descripcion: 'Organiza las próximas consultas.',
-              color: Colors.teal,
-            ),
-
-            const SizedBox(height: 25),
-
-            // ==============================
-            // BOTÓN EDITAR
-            // ==============================
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'La edición de la mascota estará disponible próximamente. ✏️',
+            // =========================
+            // IDENTIFICADOR
+            // =========================
+            Card(
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.fingerprint,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Identificador de mascota',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            id,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.edit),
-                label: const Text(
-                  'Editar información',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -256,152 +243,145 @@ class PetDetailScreen extends StatelessWidget {
     );
   }
 
-  // =========================================================
-  // TÍTULO DE SECCIÓN
-  // =========================================================
-
-  Widget _tituloSeccion(
-    String titulo,
-    IconData icono,
-  ) {
-    return Row(
-      children: [
-        Icon(
-          icono,
-          color: Colors.teal,
-          size: 23,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          titulo,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.teal,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // =========================================================
-  // TARJETA DE INFORMACIÓN
-  // =========================================================
-
-  Widget _tarjetaInformacion({
-    required IconData icono,
-    required String titulo,
-    required String valor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-
-          Icon(
-            icono,
-            color: Colors.teal,
-            size: 28,
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            titulo,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Colors.black54,
-            ),
-          ),
-
-          const SizedBox(height: 3),
-
-          Text(
-            valor,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================
-  // OPCIONES DE SALUD
-  // =========================================================
-
   Widget _opcionSalud({
     required BuildContext context,
     required IconData icono,
     required String titulo,
     required String descripcion,
     required Color color,
+    required VoidCallback onTap,
   }) {
     return Card(
-      elevation: 3,
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(15),
-
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            icono,
-            color: color,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icono,
+                  color: color,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      descripcion,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.grey.shade500,
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
 
-        title: Text(
-          titulo,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+// =====================================================
+// PANTALLA TEMPORAL
+// =====================================================
 
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            descripcion,
-          ),
-        ),
+class _PantallaProximamente extends StatelessWidget {
+  final String titulo;
+  final String mensaje;
+  final String petId;
 
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 17,
-        ),
+  const _PantallaProximamente({
+    required this.titulo,
+    required this.mensaje,
+    required this.petId,
+  });
 
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$titulo: función disponible próximamente 🐾',
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(titulo),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: Colors.teal.shade50,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.construction,
+                    size: 60,
+                    color: Colors.teal.shade600,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    titulo,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    mensaje,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'ID de mascota:\n$petId',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

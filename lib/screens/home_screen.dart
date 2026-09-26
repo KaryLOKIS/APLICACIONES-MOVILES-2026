@@ -6,6 +6,7 @@ import 'appointments_screen.dart';
 import 'login_screen.dart';
 import 'pets_screen.dart';
 import 'reminders_screen.dart';
+import 'veterinarians_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -133,6 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const AppointmentsScreen(),
+      ),
+    );
+  }
+
+  void _abrirVeterinarios(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const VeterinariansScreen(),
       ),
     );
   }
@@ -399,6 +409,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     'veterinarias de tus mascotas.',
                 onTap: () {
                   _abrirCitasVeterinarias(context);
+                },
+              ),
+
+              const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // VETERINARIOS
+              // --------------------------------------------------
+
+              _crearTarjetaMenu(
+                icono: Icons.medical_services,
+                titulo: 'Mis veterinarios',
+                descripcion:
+                    'Administra los veterinarios que '
+                    'atienden a tus mascotas.',
+                onTap: () {
+                  _abrirVeterinarios(context);
                 },
               ),
 

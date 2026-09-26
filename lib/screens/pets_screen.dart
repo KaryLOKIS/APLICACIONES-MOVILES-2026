@@ -98,10 +98,6 @@ class _PetsScreenState extends State<PetsScreen>
       conectado = hayConexion;
     });
 
-    // ---------------------------------------------------------
-    // SI VOLVIÓ INTERNET, CARGAR Y SINCRONIZAR
-    // ---------------------------------------------------------
-
     if (hayConexion && estabaDesconectado) {
       _sincronizarYRecargar();
     }
@@ -394,6 +390,7 @@ class _PetsScreenState extends State<PetsScreen>
       MaterialPageRoute(
         builder: (context) {
           return PetDetailScreen(
+            id: mascota.id,
             nombre: mascota.nombre,
             especie: mascota.especie,
             raza: mascota.raza,
