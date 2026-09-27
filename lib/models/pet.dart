@@ -10,6 +10,10 @@ class Pet {
   final String raza;
   final int edad;
 
+  // Información adicional de la mascota
+  final double? peso;
+  final String? alergias;
+
   @JsonKey(name: 'updated_at')
   final DateTime updatedAt;
 
@@ -22,10 +26,16 @@ class Pet {
     required this.especie,
     required this.raza,
     required this.edad,
+    this.peso,
+    this.alergias,
     required this.updatedAt,
     this.syncStatus = 'pending',
     this.deleted = false,
   });
+
+  // =========================================================
+  // JSON
+  // =========================================================
 
   factory Pet.fromJson(
     Map<String, dynamic> json,
@@ -35,6 +45,10 @@ class Pet {
   Map<String, dynamic> toJson() =>
       _$PetToJson(this);
 
+  // =========================================================
+  // SQLITE - TO MAP
+  // =========================================================
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -42,11 +56,17 @@ class Pet {
       'especie': especie,
       'raza': raza,
       'edad': edad,
+      'peso': peso,
+      'alergias': alergias,
       'updated_at': updatedAt.toIso8601String(),
       'sync_status': syncStatus,
       'deleted': deleted ? 1 : 0,
     };
   }
+
+  // =========================================================
+  // SQLITE - FROM MAP
+  // =========================================================
 
   factory Pet.fromMap(
     Map<String, dynamic> map,
@@ -57,15 +77,29 @@ class Pet {
       especie: map['especie'] as String,
       raza: map['raza'] as String,
       edad: map['edad'] as int,
+
+      // SQLite puede devolver REAL como num.
+      peso: map['peso'] == null
+          ? null
+          : (map['peso'] as num).toDouble(),
+
+      alergias: map['alergias']?.toString(),
+
       updatedAt: DateTime.parse(
         map['updated_at'] as String,
       ),
+
       syncStatus:
           map['sync_status'] as String? ?? 'pending',
+
       deleted:
           (map['deleted'] as int? ?? 0) == 1,
     );
   }
+
+  // =========================================================
+  // COPY WITH
+  // =========================================================
 
   Pet copyWith({
     String? id,
@@ -73,6 +107,8 @@ class Pet {
     String? especie,
     String? raza,
     int? edad,
+    double? peso,
+    String? alergias,
     DateTime? updatedAt,
     String? syncStatus,
     bool? deleted,
@@ -83,6 +119,8 @@ class Pet {
       especie: especie ?? this.especie,
       raza: raza ?? this.raza,
       edad: edad ?? this.edad,
+      peso: peso ?? this.peso,
+      alergias: alergias ?? this.alergias,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       deleted: deleted ?? this.deleted,

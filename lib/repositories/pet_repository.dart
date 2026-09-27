@@ -35,7 +35,7 @@ class PetRepository {
   static const int _maxIntentos = 5;
 
   // =========================================================
-  // INICIAR ESCUCHA DE CONECTIVIDAD
+  // INICIAR SINCRONIZACIÓN AUTOMÁTICA
   // =========================================================
 
   void iniciarSincronizacionAutomatica() {
@@ -57,7 +57,7 @@ class PetRepository {
   }
 
   // =========================================================
-  // DETENER ESCUCHA DE CONECTIVIDAD
+  // DETENER SINCRONIZACIÓN AUTOMÁTICA
   // =========================================================
 
   Future<void> detenerSincronizacionAutomatica() async {
@@ -104,7 +104,8 @@ class PetRepository {
     // ---------------------------------------------------------
 
     try {
-      // Primero intentamos enviar operaciones pendientes.
+      // Primero intentamos sincronizar cualquier operación
+      // pendiente.
       await sincronizarPendientes();
 
       final mascotasRemotas =
@@ -113,16 +114,14 @@ class PetRepository {
       final mascotasLocalesActualizadas =
           await _localDataSource.obtenerMascotas();
 
-      final resultado =
-          <String, Pet>{};
+      final resultado = <String, Pet>{};
 
       // -------------------------------------------------------
       // GUARDAR DATOS REMOTOS
       // -------------------------------------------------------
 
       for (final petRemota in mascotasRemotas) {
-        final local =
-            _buscarMascotaPorId(
+        final local = _buscarMascotaPorId(
           mascotasLocalesActualizadas,
           petRemota.id,
         );
@@ -135,8 +134,7 @@ class PetRepository {
           continue;
         }
 
-        final sincronizada =
-            petRemota.copyWith(
+        final sincronizada = petRemota.copyWith(
           syncStatus: 'synced',
           deleted: false,
         );
@@ -152,8 +150,7 @@ class PetRepository {
       // CONSERVAR CAMBIOS LOCALES PENDIENTES
       // -------------------------------------------------------
 
-      for (final local
-          in mascotasLocalesActualizadas) {
+      for (final local in mascotasLocalesActualizadas) {
         if (local.syncStatus != 'synced') {
           resultado[local.id] = local;
         }
@@ -189,8 +186,45 @@ class PetRepository {
       updatedAt: DateTime.now(),
     );
 
+    // Guardar primero en SQLite.
+    await _localDataSource.guardarMascota(
+      petPendiente,
+    );
+
+    // Crear operación CREATE.
+    await _agregarOperacionCrear(
+      petPendiente,
+    );
+
+    // Si hay conexión, intentar sincronizar.
+    if (await _hayConexion()) {
+      await sincronizarPendientes();
+    }
+
+    // Devolver la versión local actual.
+    final mascotas =
+        await _localDataSource.obtenerMascotas();
+
+    return _buscarMascotaPorId(
+          mascotas,
+          petPendiente.id,
+        ) ??
+        petPendiente;
+  }
+
+  // =========================================================
+  // ACTUALIZAR MASCOTA
+  // =========================================================
+
+  Future<Pet> actualizarMascota(Pet pet) async {
+    final petPendiente = pet.copyWith(
+      syncStatus: 'pending',
+      deleted: false,
+      updatedAt: DateTime.now(),
+    );
+
     // ---------------------------------------------------------
-    // GUARDAR PRIMERO EN SQLITE
+    // GUARDAR CAMBIO LOCAL
     // ---------------------------------------------------------
 
     await _localDataSource.guardarMascota(
@@ -198,15 +232,15 @@ class PetRepository {
     );
 
     // ---------------------------------------------------------
-    // CREAR OPERACIÓN PENDIENTE
+    // CREAR OPERACIÓN UPDATE
     // ---------------------------------------------------------
 
-    await _agregarOperacionCrear(
+    await _agregarOperacionActualizar(
       petPendiente,
     );
 
     // ---------------------------------------------------------
-    // SI HAY INTERNET, INTENTAR SINCRONIZAR
+    // INTENTAR SINCRONIZAR
     // ---------------------------------------------------------
 
     if (await _hayConexion()) {
@@ -214,7 +248,7 @@ class PetRepository {
     }
 
     // ---------------------------------------------------------
-    // DEVOLVER LA VERSIÓN ACTUAL LOCAL
+    // DEVOLVER ESTADO LOCAL ACTUAL
     // ---------------------------------------------------------
 
     final mascotas =
@@ -234,25 +268,13 @@ class PetRepository {
   Future<void> eliminarMascota(
     String id,
   ) async {
-    // ---------------------------------------------------------
-    // MARCAR COMO ELIMINADA LOCALMENTE
-    // ---------------------------------------------------------
-
     await _localDataSource.eliminarMascota(
       id,
     );
 
-    // ---------------------------------------------------------
-    // AGREGAR DELETE A LA COLA
-    // ---------------------------------------------------------
-
     await _agregarOperacionEliminar(
       id,
     );
-
-    // ---------------------------------------------------------
-    // SI HAY INTERNET, INTENTAR SINCRONIZAR
-    // ---------------------------------------------------------
 
     if (await _hayConexion()) {
       await sincronizarPendientes();
@@ -277,6 +299,8 @@ class PetRepository {
         'especie': pet.especie,
         'raza': pet.raza,
         'edad': pet.edad,
+        'peso': pet.peso,
+        'alergias': pet.alergias,
       }),
       'created_at':
           DateTime.now().toIso8601String(),
@@ -285,9 +309,45 @@ class PetRepository {
       'status': 'pending',
     };
 
-    await _localDataSource
-        .agregarOperacionPendiente(
+    await _localDataSource.agregarOperacionPendiente(
       operacion,
+    );
+  }
+
+  // =========================================================
+  // AGREGAR UPDATE A LA COLA
+  // =========================================================
+
+  Future<void> _agregarOperacionActualizar(
+    Pet pet,
+  ) async {
+    final operacion = {
+      'operation_id': _uuid.v4(),
+      'entity': 'pets',
+      'entity_id': pet.id,
+      'operation': 'UPDATE',
+      'payload': jsonEncode({
+        'id': pet.id,
+        'nombre': pet.nombre,
+        'especie': pet.especie,
+        'raza': pet.raza,
+        'edad': pet.edad,
+        'peso': pet.peso,
+        'alergias': pet.alergias,
+      }),
+      'created_at':
+          DateTime.now().toIso8601String(),
+      'attempts': 0,
+      'next_attempt_at': null,
+      'status': 'pending',
+    };
+
+    await _localDataSource.agregarOperacionPendiente(
+      operacion,
+    );
+
+    print(
+      'PETCARE: UPDATE agregado a la cola para ${pet.nombre}',
     );
   }
 
@@ -313,8 +373,7 @@ class PetRepository {
       'status': 'pending',
     };
 
-    await _localDataSource
-        .agregarOperacionPendiente(
+    await _localDataSource.agregarOperacionPendiente(
       operacion,
     );
   }
@@ -365,6 +424,16 @@ class PetRepository {
           }
 
           // ---------------------------------------------------
+          // UPDATE
+          // ---------------------------------------------------
+
+          else if (operation == 'UPDATE') {
+            await _sincronizarUpdate(
+              operacion,
+            );
+          }
+
+          // ---------------------------------------------------
           // DELETE
           // ---------------------------------------------------
 
@@ -403,10 +472,14 @@ class PetRepository {
               'next_attempt_at': null,
             },
           );
-        } catch (_) {
-          // ---------------------------------------------------
-          // ERROR EN LA OPERACIÓN
-          // ---------------------------------------------------
+
+          print(
+            'PETCARE: Operación $operation sincronizada correctamente',
+          );
+        } catch (error) {
+          print(
+            'PETCARE: Error sincronizando $operation: $error',
+          );
 
           final nuevosIntentos =
               attempts + 1;
@@ -460,8 +533,7 @@ class PetRepository {
   Future<void> _sincronizarCreate(
     Map<String, dynamic> operacion,
   ) async {
-    final payload =
-        jsonDecode(
+    final payload = jsonDecode(
       operacion['payload'] as String,
     );
 
@@ -471,22 +543,20 @@ class PetRepository {
       );
     }
 
-    final pet =
-        Pet(
+    final pet = Pet(
       id: payload['id'] as String,
       nombre: payload['nombre'] as String,
       especie: payload['especie'] as String,
       raza: payload['raza'] as String,
-      edad: payload['edad'] as int,
+      edad: (payload['edad'] as num).toInt(),
+      peso: payload['peso'] == null
+          ? null
+          : (payload['peso'] as num).toDouble(),
+      alergias: payload['alergias']?.toString(),
       updatedAt: DateTime.now(),
       syncStatus: 'pending',
       deleted: false,
     );
-
-    // ---------------------------------------------------------
-    // EL BACKEND UTILIZA EL UUID DEL CLIENTE
-    // PARA HACER EL CREATE IDEMPOTENTE.
-    // ---------------------------------------------------------
 
     final mascotaRemota =
         await _remoteDataSource.crearMascota(
@@ -499,9 +569,60 @@ class PetRepository {
       deleted: false,
     );
 
-    await _localDataSource
-        .guardarMascota(
+    await _localDataSource.guardarMascota(
       mascotaSincronizada,
+    );
+  }
+
+  // =========================================================
+  // SINCRONIZAR UPDATE
+  // =========================================================
+
+  Future<void> _sincronizarUpdate(
+    Map<String, dynamic> operacion,
+  ) async {
+    final payload = jsonDecode(
+      operacion['payload'] as String,
+    );
+
+    if (payload is! Map) {
+      throw Exception(
+        'Payload UPDATE inválido.',
+      );
+    }
+
+    final pet = Pet(
+      id: payload['id'] as String,
+      nombre: payload['nombre'] as String,
+      especie: payload['especie'] as String,
+      raza: payload['raza'] as String,
+      edad: (payload['edad'] as num).toInt(),
+      peso: payload['peso'] == null
+          ? null
+          : (payload['peso'] as num).toDouble(),
+      alergias: payload['alergias']?.toString(),
+      updatedAt: DateTime.now(),
+      syncStatus: 'pending',
+      deleted: false,
+    );
+
+    final mascotaRemota =
+        await _remoteDataSource.actualizarMascota(
+      pet,
+    );
+
+    final mascotaSincronizada =
+        mascotaRemota.copyWith(
+      syncStatus: 'synced',
+      deleted: false,
+    );
+
+    await _localDataSource.guardarMascota(
+      mascotaSincronizada,
+    );
+
+    print(
+      'PETCARE: Mascota ${mascotaSincronizada.nombre} actualizada y sincronizada',
     );
   }
 
@@ -512,8 +633,7 @@ class PetRepository {
   Future<void> _sincronizarDelete(
     Map<String, dynamic> operacion,
   ) async {
-    final payload =
-        jsonDecode(
+    final payload = jsonDecode(
       operacion['payload'] as String,
     );
 
@@ -525,8 +645,6 @@ class PetRepository {
 
     final id = payload['id'] as String;
 
-    // DELETE es idempotente:
-    // repetirlo no debe crear información duplicada.
     await _remoteDataSource.eliminarMascota(
       id,
     );
@@ -547,8 +665,7 @@ class PetRepository {
     }
 
     final nextAttemptAt =
-        operacion['next_attempt_at']
-            as String?;
+        operacion['next_attempt_at'] as String?;
 
     if (nextAttemptAt == null ||
         nextAttemptAt.isEmpty) {
@@ -564,8 +681,9 @@ class PetRepository {
       return true;
     }
 
-    return !DateTime.now()
-        .isBefore(fechaSiguiente);
+    return !DateTime.now().isBefore(
+      fechaSiguiente,
+    );
   }
 
   // =========================================================

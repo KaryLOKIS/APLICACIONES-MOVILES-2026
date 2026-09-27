@@ -13,14 +13,11 @@ class DewormingScreen extends StatefulWidget {
   });
 
   @override
-  State<DewormingScreen> createState() =>
-      _DewormingScreenState();
+  State<DewormingScreen> createState() => _DewormingScreenState();
 }
 
-class _DewormingScreenState
-    extends State<DewormingScreen> {
-  final DatabaseService _databaseService =
-      DatabaseService.instance;
+class _DewormingScreenState extends State<DewormingScreen> {
+  final DatabaseService _databaseService = DatabaseService.instance;
 
   List<Map<String, dynamic>> _desparasitaciones = [];
   bool _cargando = true;
@@ -31,26 +28,26 @@ class _DewormingScreenState
     _cargarDesparasitaciones();
   }
 
-  // =========================================================
-  // CARGAR DESPARASITACIONES
-  // =========================================================
-
   Future<void> _cargarDesparasitaciones() async {
-    setState(() {
-      _cargando = true;
-    });
+    if (mounted) {
+      setState(() {
+        _cargando = true;
+      });
+    }
 
     try {
       final resultados =
-          await _databaseService
-              .obtenerDesparasitacionesPorMascota(
+          await _databaseService.obtenerDesparasitacionesPorMascota(
         widget.petId,
       );
 
       if (!mounted) return;
 
       setState(() {
-        _desparasitaciones = resultados;
+        _desparasitaciones = resultados
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+
         _cargando = false;
       });
     } catch (e) {
@@ -61,49 +58,44 @@ class _DewormingScreenState
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'No se pudieron cargar las desparasitaciones.',
+            'No se pudieron cargar las desparasitaciones: $e',
           ),
+          backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // =========================================================
-  // MOSTRAR FORMULARIO
-  // =========================================================
-
   Future<void> _mostrarFormulario({
     Map<String, dynamic>? desparasitacion,
   }) async {
-    final resultado =
-        await showDialog<Map<String, dynamic>>(
+    final resultado = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (dialogContext) {
+      barrierDismissible: false,
+      builder: (_) {
         return _FormularioDesparasitacionDialog(
           desparasitacion: desparasitacion,
         );
       },
     );
 
-    if (resultado == null) {
-      return;
-    }
+    if (resultado == null) return;
 
     try {
       if (desparasitacion == null) {
         await _databaseService.insertarDesparasitacion(
           petId: widget.petId,
           tipo: resultado['tipo'] as String,
-          fechaAplicacion:
-              resultado['fecha_aplicacion'] as String,
-          proximaDosis:
-              resultado['proxima_dosis'] as String?,
-          veterinario:
-              resultado['veterinario'] as String,
-          observaciones:
-              resultado['observaciones'] as String,
+          fechaAplicacion: resultado['fecha_aplicacion'] as String,
+
+          // Se conserva vacío únicamente para mantener
+          // compatibilidad con DatabaseService.
+          proximaDosis: '',
+
+          veterinario: resultado['veterinario'] as String,
+          observaciones: resultado['observaciones'] as String,
         );
 
         if (!mounted) return;
@@ -121,14 +113,14 @@ class _DewormingScreenState
           id: desparasitacion['id'] as String,
           petId: widget.petId,
           tipo: resultado['tipo'] as String,
-          fechaAplicacion:
-              resultado['fecha_aplicacion'] as String,
-          proximaDosis:
-              resultado['proxima_dosis'] as String?,
-          veterinario:
-              resultado['veterinario'] as String,
-          observaciones:
-              resultado['observaciones'] as String,
+          fechaAplicacion: resultado['fecha_aplicacion'] as String,
+
+          // Se conserva vacío únicamente para mantener
+          // compatibilidad con DatabaseService.
+          proximaDosis: '',
+
+          veterinario: resultado['veterinario'] as String,
+          observaciones: resultado['observaciones'] as String,
         );
 
         if (!mounted) return;
@@ -148,9 +140,9 @@ class _DewormingScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'No se pudo guardar la desparasitación.',
+            'No se pudo guardar la desparasitación: $e',
           ),
           backgroundColor: Colors.red,
         ),
@@ -158,23 +150,25 @@ class _DewormingScreenState
     }
   }
 
-  // =========================================================
-  // ELIMINAR
-  // =========================================================
-
   Future<void> _eliminarDesparasitacion(
     Map<String, dynamic> desparasitacion,
   ) async {
-    final confirmar =
-        await showDialog<bool>(
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             'Eliminar desparasitación',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          content: const Text(
-            '¿Deseas eliminar este registro de desparasitación?',
+          content: Text(
+            '¿Deseas eliminar el registro de '
+            '"${desparasitacion['tipo']}"?',
           ),
           actions: [
             TextButton(
@@ -198,9 +192,7 @@ class _DewormingScreenState
       },
     );
 
-    if (confirmar != true) {
-      return;
-    }
+    if (confirmar != true) return;
 
     try {
       await _databaseService.eliminarDesparasitacion(
@@ -223,9 +215,9 @@ class _DewormingScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'No se pudo eliminar la desparasitación.',
+            'No se pudo eliminar la desparasitación: $e',
           ),
           backgroundColor: Colors.red,
         ),
@@ -233,59 +225,22 @@ class _DewormingScreenState
     }
   }
 
-  // =========================================================
-  // FORMATO DE FECHA
-  // =========================================================
+  String _formatearFecha(String? fecha) {
+    if (fecha == null || fecha.isEmpty) {
+      return 'No registrada';
+    }
 
-  String _formatearFecha(String fecha) {
     try {
       final dateTime = DateTime.parse(fecha);
 
-      final dia =
-          dateTime.day.toString().padLeft(2, '0');
+      final dia = dateTime.day.toString().padLeft(2, '0');
+      final mes = dateTime.month.toString().padLeft(2, '0');
 
-      final mes =
-          dateTime.month.toString().padLeft(2, '0');
-
-      final anio = dateTime.year;
-
-      return '$dia/$mes/$anio';
+      return '$dia/$mes/${dateTime.year}';
     } catch (_) {
       return fecha;
     }
   }
-
-  bool _estaVencida(String? fecha) {
-    if (fecha == null || fecha.isEmpty) {
-      return false;
-    }
-
-    try {
-      final fechaProxima = DateTime.parse(fecha);
-
-      final hoy = DateTime.now();
-
-      final fechaSoloDia = DateTime(
-        fechaProxima.year,
-        fechaProxima.month,
-        fechaProxima.day,
-      );
-
-      final hoySoloDia = DateTime(
-        hoy.year,
-        hoy.month,
-        hoy.day,
-      );
-
-      return fechaSoloDia.isBefore(hoySoloDia);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  // =========================================================
-  // BUILD
-  // =========================================================
 
   @override
   Widget build(BuildContext context) {
@@ -294,10 +249,27 @@ class _DewormingScreenState
       appBar: AppBar(
         title: Text(
           'Desparasitación de ${widget.petName}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         elevation: 0,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        onPressed: () {
+          _mostrarFormulario();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text(
+          'Desparasitar',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       body: _cargando
           ? const Center(
@@ -316,7 +288,7 @@ class _DewormingScreenState
                       children: [
                         const SizedBox(height: 80),
                         Icon(
-                          Icons.medical_services_outlined,
+                          Icons.medication_outlined,
                           size: 80,
                           color: Colors.teal.shade300,
                         ),
@@ -332,8 +304,8 @@ class _DewormingScreenState
                         const SizedBox(height: 10),
                         Text(
                           'Registra las desparasitaciones de '
-                          '${widget.petName} para llevar un mejor '
-                          'control de su salud.',
+                          '${widget.petName} para llevar un '
+                          'mejor control de su salud.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15,
@@ -342,28 +314,21 @@ class _DewormingScreenState
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton.icon(
-                          style:
-                              ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.teal,
-                            foregroundColor:
-                                Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 14,
                             ),
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          onPressed:
-                              _mostrarFormulario,
-                          icon: const Icon(
-                            Icons.add,
-                          ),
+                          onPressed: () {
+                            _mostrarFormulario();
+                          },
+                          icon: const Icon(Icons.add),
                           label: const Text(
                             'Registrar desparasitación',
                           ),
@@ -373,36 +338,48 @@ class _DewormingScreenState
                   : ListView.builder(
                       physics:
                           const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      itemCount:
-                          _desparasitaciones.length,
-                      itemBuilder:
-                          (context, index) {
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        16,
+                        100,
+                      ),
+                      itemCount: _desparasitaciones.length,
+                      itemBuilder: (context, index) {
                         final registro =
                             _desparasitaciones[index];
 
-                        final proximaDosis =
-                            registro[
-                                    'proxima_dosis']
-                                as String?;
+                        final producto =
+                            registro['tipo']?.toString() ??
+                                'Producto';
 
-                        final vencida =
-                            _estaVencida(
-                          proximaDosis,
-                        );
+                        final veterinario =
+                            registro['veterinario']
+                                    ?.toString() ??
+                                '';
 
-                        return Card(
-                          margin:
-                              const EdgeInsets.only(
+                        final observaciones =
+                            registro['observaciones']
+                                    ?.toString() ??
+                                '';
+
+                        return Container(
+                          margin: const EdgeInsets.only(
                             bottom: 14,
                           ),
-                          elevation: 2,
-                          shape:
-                              RoundedRectangleBorder(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
                             borderRadius:
-                                BorderRadius.circular(
-                              18,
-                            ),
+                                BorderRadius.circular(18),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: 0.06,
+                                ),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                           ),
                           child: Padding(
                             padding:
@@ -413,8 +390,7 @@ class _DewormingScreenState
                               children: [
                                 Row(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Container(
                                       width: 52,
@@ -422,24 +398,18 @@ class _DewormingScreenState
                                       decoration:
                                           BoxDecoration(
                                         color: Colors
-                                            .teal
-                                            .shade50,
-                                        shape:
-                                            BoxShape
-                                                .circle,
+                                            .orange.shade50,
+                                        shape: BoxShape.circle,
                                       ),
                                       child: Icon(
                                         Icons
-                                            .medical_services,
+                                            .medication_outlined,
                                         color: Colors
-                                            .teal
-                                            .shade700,
+                                            .orange.shade700,
                                         size: 28,
                                       ),
                                     ),
-                                    const SizedBox(
-                                      width: 14,
-                                    ),
+                                    const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -447,93 +417,71 @@ class _DewormingScreenState
                                                 .start,
                                         children: [
                                           Text(
-                                            registro[
-                                                    'tipo']
-                                                as String,
+                                            producto,
                                             style:
                                                 const TextStyle(
-                                              fontSize:
-                                                  18,
+                                              fontSize: 18,
                                               fontWeight:
-                                                  FontWeight
-                                                      .bold,
+                                                  FontWeight.bold,
                                             ),
                                           ),
                                           const SizedBox(
                                             height: 5,
                                           ),
                                           Text(
-                                            'Aplicación: '
-                                            '${_formatearFecha(
-                                              registro[
-                                                      'fecha_aplicacion']
-                                                  as String,
-                                            )}',
-                                            style:
-                                                TextStyle(
+                                            widget.petName,
+                                            style: TextStyle(
                                               color: Colors
-                                                  .grey
-                                                  .shade700,
+                                                  .grey.shade600,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                     PopupMenuButton<String>(
-                                      onSelected:
-                                          (opcion) {
-                                        if (opcion ==
+                                      onSelected: (value) {
+                                        if (value ==
                                             'editar') {
                                           _mostrarFormulario(
                                             desparasitacion:
                                                 registro,
                                           );
-                                        } else if (opcion ==
+                                        }
+
+                                        if (value ==
                                             'eliminar') {
                                           _eliminarDesparasitacion(
                                             registro,
                                           );
                                         }
                                       },
-                                      itemBuilder:
-                                          (context) =>
-                                              const [
+                                      itemBuilder: (_) => const [
                                         PopupMenuItem(
-                                          value:
-                                              'editar',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.edit,
-                                              ),
-                                              SizedBox(
-                                                width:
-                                                    8,
-                                              ),
-                                              Text(
-                                                'Editar',
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value:
-                                              'eliminar',
+                                          value: 'editar',
                                           child: Row(
                                             children: [
                                               Icon(
                                                 Icons
-                                                    .delete,
-                                                color: Colors
-                                                    .red,
+                                                    .edit_outlined,
+                                                color:
+                                                    Colors.teal,
                                               ),
-                                              SizedBox(
-                                                width:
-                                                    8,
+                                              SizedBox(width: 10),
+                                              Text('Editar'),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'eliminar',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons
+                                                    .delete_outline,
+                                                color: Colors.red,
                                               ),
-                                              Text(
-                                                'Eliminar',
-                                              ),
+                                              SizedBox(width: 10),
+                                              Text('Eliminar'),
                                             ],
                                           ),
                                         ),
@@ -542,122 +490,43 @@ class _DewormingScreenState
                                   ],
                                 ),
 
-                                const SizedBox(
-                                  height: 16,
+                                const SizedBox(height: 16),
+
+                                Divider(
+                                  color: Colors.grey.shade200,
                                 ),
 
-                                const Divider(),
-
-                                const SizedBox(
-                                  height: 10,
-                                ),
+                                const SizedBox(height: 10),
 
                                 _dato(
-                                  icono:
-                                      Icons.person,
-                                  titulo:
-                                      'Veterinario',
-                                  valor:
-                                      registro[
-                                              'veterinario']
-                                          as String,
-                                ),
-
-                                const SizedBox(
-                                  height: 10,
-                                ),
-
-                                _dato(
-                                  icono:
-                                      Icons.event,
-                                  titulo:
-                                      'Próxima dosis',
-                                  valor:
-                                      proximaDosis !=
-                                                  null &&
-                                              proximaDosis
-                                                  .isNotEmpty
-                                          ? _formatearFecha(
-                                              proximaDosis,
-                                            )
-                                          : 'No registrada',
-                                  color: vencida
-                                      ? Colors.red
-                                      : Colors.teal
-                                          .shade700,
-                                ),
-
-                                const SizedBox(
-                                  height: 10,
-                                ),
-
-                                _dato(
-                                  icono:
-                                      Icons.notes,
-                                  titulo:
-                                      'Observaciones',
-                                  valor:
-                                      (registro[
-                                                  'observaciones']
-                                              as String)
-                                          .isNotEmpty
-                                      ? registro[
-                                              'observaciones']
-                                          as String
-                                      : 'Sin observaciones',
-                                ),
-
-                                if (vencida) ...[
-                                  const SizedBox(
-                                    height: 14,
+                                  icono: Icons
+                                      .calendar_today_outlined,
+                                  titulo: 'Aplicación',
+                                  valor: _formatearFecha(
+                                    registro[
+                                            'fecha_aplicacion']
+                                        ?.toString(),
                                   ),
-                                  Container(
-                                    width:
-                                        double.infinity,
-                                    padding:
-                                        const EdgeInsets
-                                            .all(12),
-                                    decoration:
-                                        BoxDecoration(
-                                      color: Colors
-                                          .red
-                                          .shade50,
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                        12,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons
-                                              .warning_amber,
-                                          color: Colors
-                                              .red
-                                              .shade700,
-                                        ),
-                                        const SizedBox(
-                                          width: 10,
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            'La próxima '
-                                            'desparasitación '
-                                            'ya está vencida.',
-                                            style:
-                                                TextStyle(
-                                              color: Colors
-                                                  .red
-                                                  .shade700,
-                                              fontWeight:
-                                                  FontWeight
-                                                      .w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                _dato(
+                                  icono: Icons
+                                      .medical_services_outlined,
+                                  titulo: 'Veterinario',
+                                  valor: veterinario.isEmpty
+                                      ? 'No registrado'
+                                      : veterinario,
+                                ),
+
+                                if (observaciones
+                                    .isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  _dato(
+                                    icono: Icons.notes,
+                                    titulo: 'Observaciones',
+                                    valor: observaciones,
                                   ),
                                 ],
                               ],
@@ -667,58 +536,45 @@ class _DewormingScreenState
                       },
                     ),
             ),
-      floatingActionButton:
-          FloatingActionButton.extended(
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        onPressed: _mostrarFormulario,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Desparasitar',
-        ),
-      ),
     );
   }
-
-  // =========================================================
-  // DATO
-  // =========================================================
 
   Widget _dato({
     required IconData icono,
     required String titulo,
     required String valor,
-    Color? color,
   }) {
     return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icono,
           size: 20,
-          color: color ?? Colors.teal.shade700,
+          color: Colors.teal.shade700,
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade800,
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Text(
+                titulo,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
               ),
-              children: [
-                TextSpan(
-                  text: '$titulo: ',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+              const SizedBox(height: 2),
+              Text(
+                valor,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
                 ),
-                TextSpan(
-                  text: valor,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
@@ -746,20 +602,39 @@ class _FormularioDesparasitacionDialog
 
 class _FormularioDesparasitacionDialogState
     extends State<_FormularioDesparasitacionDialog> {
-  final _formKey = GlobalKey<FormState>();
-
-  late final TextEditingController _tipoController;
-  late final TextEditingController
-      _observacionesController;
-
   final DatabaseService _databaseService =
       DatabaseService.instance;
 
+  static const String _agregarProducto =
+      '__agregar_producto__';
+
+  static const String _agregarVeterinario =
+      '__agregar_veterinario__';
+
+  final TextEditingController _nuevoProductoController =
+      TextEditingController();
+
+  final TextEditingController _observacionesController =
+      TextEditingController();
+
+  final List<String> _catalogoProductos = const [
+    'Drontal',
+    'Milbemax',
+    'Endogard',
+    'NexGard Spectra',
+    'Bravecto Plus',
+  ];
+
   List<Map<String, dynamic>> _veterinarios = [];
 
+  String? _productoSeleccionado;
   String? _veterinarioSeleccionado;
+
   DateTime? _fechaAplicacion;
-  DateTime? _proximaDosis;
+
+  bool _mostrarNuevoProducto = false;
+  bool _guardandoVeterinario = false;
+  bool _cargandoVeterinarios = true;
 
   @override
   void initState() {
@@ -767,130 +642,131 @@ class _FormularioDesparasitacionDialogState
 
     final registro = widget.desparasitacion;
 
-    _tipoController = TextEditingController(
-      text: registro?['tipo'] as String? ?? '',
-    );
+    if (registro != null) {
+      final producto =
+          registro['tipo']?.toString().trim() ?? '';
 
-    _observacionesController =
-        TextEditingController(
-      text:
-          registro?['observaciones'] as String? ?? '',
-    );
+      final opcionExistente =
+          _buscarOpcionProducto(producto);
 
-    _veterinarioSeleccionado =
-        registro?['veterinario'] as String?;
+      if (opcionExistente != null) {
+        _productoSeleccionado = opcionExistente;
+      } else if (producto.isNotEmpty) {
+        _productoSeleccionado = _agregarProducto;
+        _mostrarNuevoProducto = true;
+        _nuevoProductoController.text = producto;
+      }
 
-    final fechaAplicacion =
-        registro?['fecha_aplicacion'] as String?;
+      _observacionesController.text =
+          registro['observaciones']?.toString() ?? '';
 
-    final proximaDosis =
-        registro?['proxima_dosis'] as String?;
+      _veterinarioSeleccionado =
+          registro['veterinario']?.toString();
 
-    if (fechaAplicacion != null &&
-        fechaAplicacion.isNotEmpty) {
-      _fechaAplicacion =
-          DateTime.tryParse(fechaAplicacion);
-    }
+      final fechaAplicacion =
+          registro['fecha_aplicacion']?.toString();
 
-    if (proximaDosis != null &&
-        proximaDosis.isNotEmpty) {
-      _proximaDosis =
-          DateTime.tryParse(proximaDosis);
+      if (fechaAplicacion != null &&
+          fechaAplicacion.isNotEmpty) {
+        _fechaAplicacion =
+            DateTime.tryParse(fechaAplicacion);
+      }
     }
 
     _cargarVeterinarios();
   }
 
+  String? _buscarOpcionProducto(String producto) {
+    final normalizado =
+        producto.trim().toLowerCase();
+
+    for (final opcion in _catalogoProductos) {
+      if (opcion.toLowerCase() == normalizado) {
+        return opcion;
+      }
+    }
+
+    return null;
+  }
+
   @override
   void dispose() {
-    _tipoController.dispose();
+    _nuevoProductoController.dispose();
     _observacionesController.dispose();
     super.dispose();
   }
 
-  // =========================================================
-  // CARGAR VETERINARIOS
-  // =========================================================
-
   Future<void> _cargarVeterinarios() async {
-    final veterinarios =
-        await _databaseService
-            .obtenerVeterinarios();
+    try {
+      final veterinarios =
+          await _databaseService.obtenerVeterinarios();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _veterinarios = veterinarios;
-    });
+      setState(() {
+        _veterinarios = veterinarios
+            .map(
+              (item) =>
+                  Map<String, dynamic>.from(item),
+            )
+            .toList();
+
+        final seleccionado =
+            _veterinarioSeleccionado;
+
+        if (seleccionado != null &&
+            seleccionado.isNotEmpty) {
+          final existe = _veterinarios.any(
+            (item) =>
+                item['nombre']?.toString() ==
+                seleccionado,
+          );
+
+          if (!existe) {
+            _veterinarioSeleccionado = null;
+          }
+        }
+
+        _cargandoVeterinarios = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _cargandoVeterinarios = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudieron cargar los veterinarios.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  // =========================================================
-  // FECHA
-  // =========================================================
-
   Future<void> _seleccionarFechaAplicacion() async {
-    final seleccionada =
-        await showDatePicker(
+    final seleccionada = await showDatePicker(
       context: context,
       initialDate:
           _fechaAplicacion ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      helpText:
-          'Selecciona la fecha de aplicación',
-      confirmText: 'Aceptar',
+      helpText: 'Fecha de aplicación',
+      confirmText: 'Seleccionar',
       cancelText: 'Cancelar',
     );
 
-    if (seleccionada == null) {
+    if (seleccionada == null || !mounted) {
       return;
     }
 
     setState(() {
       _fechaAplicacion = seleccionada;
     });
-
-    if (_proximaDosis != null &&
-        _proximaDosis!
-            .isBefore(seleccionada)) {
-      setState(() {
-        _proximaDosis = null;
-      });
-    }
   }
-
-  Future<void> _seleccionarProximaDosis() async {
-    final fechaBase =
-        _fechaAplicacion ?? DateTime.now();
-
-    final seleccionada =
-        await showDatePicker(
-      context: context,
-      initialDate:
-          _proximaDosis ??
-              fechaBase.add(
-                const Duration(days: 30),
-              ),
-      firstDate: fechaBase,
-      lastDate: DateTime(2100),
-      helpText:
-          'Selecciona la próxima dosis',
-      confirmText: 'Aceptar',
-      cancelText: 'Cancelar',
-    );
-
-    if (seleccionada == null) {
-      return;
-    }
-
-    setState(() {
-      _proximaDosis = seleccionada;
-    });
-  }
-
-  // =========================================================
-  // FORMATO
-  // =========================================================
 
   String _formatearFecha(DateTime? fecha) {
     if (fecha == null) {
@@ -906,12 +782,124 @@ class _FormularioDesparasitacionDialogState
     return '$dia/$mes/${fecha.year}';
   }
 
-  // =========================================================
-  // GUARDAR
-  // =========================================================
+  Future<void> _agregarVeterinarioNuevo() async {
+    final resultado =
+        await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const _NuevoVeterinarioDialog();
+      },
+    );
+
+    if (resultado == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _guardandoVeterinario = true;
+    });
+
+    try {
+      await _databaseService.insertarVeterinario(
+        nombre: resultado['nombre']!,
+        especialidad: resultado['especialidad']!,
+        telefono: resultado['telefono']!,
+        clinica: resultado['clinica']!,
+      );
+
+      final veterinarios =
+          await _databaseService.obtenerVeterinarios();
+
+      if (!mounted) return;
+
+      setState(() {
+        _veterinarios = veterinarios
+            .map(
+              (item) =>
+                  Map<String, dynamic>.from(item),
+            )
+            .toList();
+
+        _veterinarioSeleccionado =
+            resultado['nombre'];
+
+        _guardandoVeterinario = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Veterinario agregado y seleccionado.',
+          ),
+          backgroundColor: Colors.teal,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _guardandoVeterinario = false;
+        _veterinarioSeleccionado = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo agregar el veterinario: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   void _guardar() {
-    if (!_formKey.currentState!.validate()) {
+    String producto;
+
+    if (_productoSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selecciona un producto o medicamento.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_productoSeleccionado == _agregarProducto) {
+      producto =
+          _nuevoProductoController.text.trim();
+
+      if (producto.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Escribe el nombre del nuevo producto.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    } else {
+      producto = _productoSeleccionado!;
+    }
+
+    if (_veterinarioSeleccionado == null ||
+        _veterinarioSeleccionado!.isEmpty ||
+        _veterinarioSeleccionado ==
+            _agregarVeterinario) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selecciona un veterinario.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -921,43 +909,16 @@ class _FormularioDesparasitacionDialogState
           content: Text(
             'Selecciona la fecha de aplicación.',
           ),
-        ),
-      );
-      return;
-    }
-
-    if (_veterinarioSeleccionado == null ||
-        _veterinarioSeleccionado!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Selecciona un veterinario.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (_proximaDosis != null &&
-        _proximaDosis!
-            .isBefore(_fechaAplicacion!)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'La próxima dosis no puede ser anterior '
-            'a la fecha de aplicación.',
-          ),
+          backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
     Navigator.of(context).pop({
-      'tipo': _tipoController.text.trim(),
+      'tipo': producto,
       'fecha_aplicacion':
           _fechaAplicacion!.toIso8601String(),
-      'proxima_dosis':
-          _proximaDosis?.toIso8601String(),
       'veterinario':
           _veterinarioSeleccionado!,
       'observaciones':
@@ -965,9 +926,30 @@ class _FormularioDesparasitacionDialogState
     });
   }
 
-  // =========================================================
-  // BUILD FORMULARIO
-  // =========================================================
+  InputDecoration _decoracionCampo({
+    required String label,
+    required IconData icono,
+    String? hint,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(
+        icono,
+        color: Colors.teal,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: Colors.teal,
+          width: 2,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -975,198 +957,528 @@ class _FormularioDesparasitacionDialogState
         widget.desparasitacion != null;
 
     return AlertDialog(
-      title: Text(
-        esEdicion
-            ? 'Editar desparasitación'
-            : 'Registrar desparasitación',
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: Row(
+        children: [
+          Icon(
+            Icons.medication_outlined,
+            color: Colors.teal.shade700,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              esEdicion
+                  ? 'Editar desparasitación'
+                  : 'Registrar desparasitación',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
       content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _tipoController,
-                textCapitalization:
-                    TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  labelText:
-                      'Producto o medicamento',
-                  hintText:
-                      'Ej.: Drontal, NexGard, etc.',
-                  prefixIcon: const Icon(
-                    Icons.medication,
-                  ),
-                  filled: true,
-                  fillColor: Colors.teal.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
-                    return 'Ingresa el producto utilizado.';
-                  }
-
-                  return null;
-                },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Completa la información del tratamiento.',
+              style: TextStyle(
+                color: Colors.grey.shade600,
               ),
+            ),
 
-              const SizedBox(height: 14),
+            const SizedBox(height: 18),
 
-              DropdownButtonFormField<String>(
-                initialValue:
-                    _veterinarioSeleccionado,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Veterinario',
-                  prefixIcon: const Icon(
-                    Icons.person,
-                  ),
-                  filled: true,
-                  fillColor: Colors.teal.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                items: _veterinarios.map(
-                  (veterinario) {
-                    final nombre =
-                        veterinario['nombre']
-                            as String;
+            // =================================================
+            // PRODUCTO
+            // =================================================
 
-                    final especialidad =
-                        veterinario[
-                                'especialidad']
-                            as String;
-
-                    return DropdownMenuItem<
-                        String>(
-                      value: nombre,
+            DropdownButtonFormField<String>(
+              initialValue:
+                  _productoSeleccionado,
+              isExpanded: true,
+              decoration: _decoracionCampo(
+                label: 'Producto o medicamento',
+                icono: Icons.medication_outlined,
+                hint: 'Seleccionar producto',
+              ),
+              items: [
+                ..._catalogoProductos.map(
+                  (producto) {
+                    return DropdownMenuItem<String>(
+                      value: producto,
                       child: Text(
-                        '$nombre · $especialidad',
+                        producto,
                         overflow:
                             TextOverflow.ellipsis,
                       ),
                     );
                   },
-                ).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _veterinarioSeleccionado =
-                        value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null ||
-                      value.isEmpty) {
-                    return 'Selecciona un veterinario.';
+                ),
+
+                const DropdownMenuItem<String>(
+                  value: _agregarProducto,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.teal,
+                        size: 21,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Agregar nuevo producto',
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.teal,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _productoSeleccionado = value;
+
+                  if (value == _agregarProducto) {
+                    _mostrarNuevoProducto = true;
+                  } else {
+                    _mostrarNuevoProducto = false;
+                    _nuevoProductoController.clear();
                   }
+                });
+              },
+            ),
 
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 14),
-
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.teal,
-                    side: const BorderSide(
-                      color: Colors.teal,
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(
-                      vertical: 14,
-                    ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed:
-                      _seleccionarFechaAplicacion,
-                  icon: const Icon(
-                    Icons.calendar_today,
-                  ),
-                  label: Text(
-                    'Aplicación: '
-                    '${_formatearFecha(
-                      _fechaAplicacion,
-                    )}',
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.teal,
-                    side: const BorderSide(
-                      color: Colors.teal,
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(
-                      vertical: 14,
-                    ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed:
-                      _seleccionarProximaDosis,
-                  icon: const Icon(
-                    Icons.event_available,
-                  ),
-                  label: Text(
-                    'Próxima dosis: '
-                    '${_formatearFecha(
-                      _proximaDosis,
-                    )}',
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              TextFormField(
+            if (_mostrarNuevoProducto) ...[
+              const SizedBox(height: 12),
+              TextField(
                 controller:
-                    _observacionesController,
-                maxLines: 3,
+                    _nuevoProductoController,
                 textCapitalization:
                     TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  labelText: 'Observaciones',
-                  hintText:
-                      'Información adicional...',
-                  prefixIcon: const Icon(
-                    Icons.notes,
-                  ),
-                  filled: true,
-                  fillColor: Colors.teal.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
+                decoration: _decoracionCampo(
+                  label: 'Nombre del producto',
+                  icono: Icons.edit_outlined,
+                  hint: 'Escribe el nombre',
                 ),
               ),
             ],
+
+            const SizedBox(height: 14),
+
+            // =================================================
+            // VETERINARIO
+            // =================================================
+
+            _cargandoVeterinarios
+                ? Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.grey.shade400,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.teal,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Cargando veterinarios...',
+                        ),
+                      ],
+                    ),
+                  )
+                : DropdownButtonFormField<String>(
+                    initialValue:
+                        _veterinarioSeleccionado,
+                    isExpanded: true,
+                    decoration: _decoracionCampo(
+                      label: 'Veterinario',
+                      icono:
+                          Icons.medical_services,
+                      hint:
+                          'Seleccionar veterinario',
+                    ),
+                    items: [
+                      ..._veterinarios.map(
+                        (veterinario) {
+                          final nombre =
+                              veterinario['nombre']
+                                      ?.toString() ??
+                                  '';
+
+                          final especialidad =
+                              veterinario[
+                                          'especialidad']
+                                      ?.toString() ??
+                                  '';
+
+                          return DropdownMenuItem<
+                              String>(
+                            value: nombre,
+                            child: Text(
+                              especialidad.isEmpty
+                                  ? nombre
+                                  : '$nombre · '
+                                      '$especialidad',
+                              overflow:
+                                  TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
+                      ),
+
+                      const DropdownMenuItem<String>(
+                        value:
+                            _agregarVeterinario,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.person_add_alt_1,
+                              color: Colors.teal,
+                              size: 21,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Agregar nuevo veterinario',
+                                overflow:
+                                    TextOverflow
+                                        .ellipsis,
+                                style: TextStyle(
+                                  color: Colors.teal,
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onChanged:
+                        _guardandoVeterinario
+                            ? null
+                            : (value) async {
+                                if (value ==
+                                    _agregarVeterinario) {
+                                  await _agregarVeterinarioNuevo();
+                                  return;
+                                }
+
+                                setState(() {
+                                  _veterinarioSeleccionado =
+                                      value;
+                                });
+                              },
+                  ),
+
+            const SizedBox(height: 14),
+
+            // =================================================
+            // FECHA DE APLICACIÓN
+            // =================================================
+
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor:
+                      Colors.teal.shade700,
+                  side: BorderSide(
+                    color: Colors.teal.shade300,
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed:
+                    _seleccionarFechaAplicacion,
+                icon: const Icon(
+                  Icons.calendar_today,
+                ),
+                label: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Aplicación: '
+                    '${_formatearFecha(_fechaAplicacion)}',
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // =================================================
+            // OBSERVACIONES
+            // =================================================
+
+            TextField(
+              controller:
+                  _observacionesController,
+              maxLines: 3,
+              textCapitalization:
+                  TextCapitalization.sentences,
+              decoration: _decoracionCampo(
+                label: 'Observaciones',
+                icono: Icons.notes,
+                hint: 'Información adicional...',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _guardandoVeterinario
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                },
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
           ),
+          onPressed: _guardandoVeterinario
+              ? null
+              : _guardar,
+          icon: const Icon(Icons.save),
+          label: Text(
+            esEdicion
+                ? 'Guardar cambios'
+                : 'Guardar',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ===========================================================
+// NUEVO VETERINARIO
+// ===========================================================
+
+class _NuevoVeterinarioDialog
+    extends StatefulWidget {
+  const _NuevoVeterinarioDialog();
+
+  @override
+  State<_NuevoVeterinarioDialog> createState() =>
+      _NuevoVeterinarioDialogState();
+}
+
+class _NuevoVeterinarioDialogState
+    extends State<_NuevoVeterinarioDialog> {
+  late final TextEditingController
+      _nombreController;
+
+  late final TextEditingController
+      _especialidadController;
+
+  late final TextEditingController
+      _telefonoController;
+
+  late final TextEditingController
+      _clinicaController;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _nombreController =
+        TextEditingController();
+
+    _especialidadController =
+        TextEditingController();
+
+    _telefonoController =
+        TextEditingController();
+
+    _clinicaController =
+        TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _especialidadController.dispose();
+    _telefonoController.dispose();
+    _clinicaController.dispose();
+
+    super.dispose();
+  }
+
+  void _guardar() {
+    final nombre =
+        _nombreController.text.trim();
+
+    final especialidad =
+        _especialidadController.text.trim();
+
+    final telefono =
+        _telefonoController.text.trim();
+
+    final clinica =
+        _clinicaController.text.trim();
+
+    if (nombre.isEmpty ||
+        especialidad.isEmpty ||
+        telefono.isEmpty ||
+        clinica.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Completa todos los campos.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop({
+      'nombre': nombre,
+      'especialidad': especialidad,
+      'telefono': telefono,
+      'clinica': clinica,
+    });
+  }
+
+  InputDecoration _decoracion({
+    required String label,
+    required String hint,
+    required IconData icono,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(
+        icono,
+        color: Colors.teal,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: Colors.teal,
+          width: 2,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+      ),
+      title: Row(
+        children: [
+          Icon(
+            Icons.person_add_alt_1,
+            color: Colors.teal.shade700,
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Nuevo veterinario',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'El veterinario se agregará al '
+              'catálogo de PetCare.',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _nombreController,
+              textCapitalization:
+                  TextCapitalization.words,
+              decoration: _decoracion(
+                label: 'Nombre del veterinario',
+                hint: 'Ej. Dra. Ana Torres',
+                icono: Icons.person_outline,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller:
+                  _especialidadController,
+              textCapitalization:
+                  TextCapitalization.sentences,
+              decoration: _decoracion(
+                label: 'Especialidad',
+                hint: 'Ej. Medicina veterinaria',
+                icono: Icons.school_outlined,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _telefonoController,
+              keyboardType: TextInputType.phone,
+              decoration: _decoracion(
+                label: 'Teléfono',
+                hint: 'Ej. 099 123 4567',
+                icono: Icons.phone_outlined,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _clinicaController,
+              textCapitalization:
+                  TextCapitalization.words,
+              decoration: _decoracion(
+                label: 'Clínica o veterinaria',
+                hint: 'Ej. Clínica Animal Care',
+                icono:
+                    Icons.local_hospital_outlined,
+              ),
+            ),
+          ],
         ),
       ),
       actions: [
@@ -1174,19 +1486,23 @@ class _FormularioDesparasitacionDialogState
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text(
+          child: Text(
             'Cancelar',
+            style: TextStyle(
+              color: Colors.grey.shade700,
+            ),
           ),
         ),
-        ElevatedButton(
+        ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
           ),
           onPressed: _guardar,
-          child: Text(
-            esEdicion ? 'Guardar cambios' : 'Guardar',
+          icon: const Icon(
+            Icons.save_outlined,
           ),
+          label: const Text('Guardar'),
         ),
       ],
     );

@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
+
 const {
   body,
   validationResult,
@@ -56,10 +57,13 @@ const db = new sqlite3.Database(DB_PATH, (error) => {
       'PETCARE ERROR: No se pudo abrir SQLite:',
       error.message
     );
+
     return;
   }
 
-  console.log('PETCARE: Base de datos SQLite conectada');
+  console.log(
+    'PETCARE: Base de datos SQLite conectada'
+  );
 });
 
 // ==========================================
@@ -113,15 +117,20 @@ function dbAll(sql, params = []) {
 // ==========================================
 
 db.serialize(() => {
+  // ----------------------------------------
+  // TABLA USERS
+  // ----------------------------------------
+
   db.run(
     `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      nombre TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    )
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        telefono TEXT,
+        created_at TEXT NOT NULL
+      )
     `,
     (error) => {
       if (error) {
@@ -129,24 +138,97 @@ db.serialize(() => {
           'PETCARE ERROR creando users:',
           error.message
         );
-      } else {
-        console.log('PETCARE: Tabla users lista');
+
+        return;
       }
+
+      console.log(
+        'PETCARE: Tabla users lista'
+      );
+
+      // ------------------------------------
+      // MIGRACIÓN PARA BASES EXISTENTES
+      // ------------------------------------
+      //
+      // Si petcare.db fue creada antes de
+      // incorporar "telefono", CREATE TABLE
+      // IF NOT EXISTS no modifica la tabla.
+      //
+      // Por eso verificamos la estructura y
+      // agregamos la columna si hace falta.
+      //
+
+      db.all(
+        `PRAGMA table_info(users)`,
+        [],
+        (pragmaError, columnas) => {
+          if (pragmaError) {
+            console.error(
+              'PETCARE ERROR verificando users:',
+              pragmaError.message
+            );
+
+            return;
+          }
+
+          const existeTelefono =
+            columnas.some(
+              (columna) =>
+                columna.name === 'telefono'
+            );
+
+          if (existeTelefono) {
+            console.log(
+              'PETCARE: Columna telefono lista'
+            );
+
+            return;
+          }
+
+          db.run(
+            `
+              ALTER TABLE users
+              ADD COLUMN telefono TEXT
+            `,
+            (alterError) => {
+              if (alterError) {
+                console.error(
+                  'PETCARE ERROR agregando telefono:',
+                  alterError.message
+                );
+
+                return;
+              }
+
+              console.log(
+                'PETCARE: Columna telefono agregada correctamente'
+              );
+            }
+          );
+        }
+      );
     }
   );
 
+
+    // ----------------------------------------
+  // TABLA PETS
+  // ----------------------------------------
+
   db.run(
     `
-    CREATE TABLE IF NOT EXISTS pets (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      nombre TEXT NOT NULL,
-      especie TEXT NOT NULL,
-      raza TEXT NOT NULL,
-      edad INTEGER NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
+      CREATE TABLE IF NOT EXISTS pets (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        especie TEXT NOT NULL,
+        raza TEXT NOT NULL,
+        edad INTEGER NOT NULL,
+        peso REAL,
+        alergias TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
     `,
     (error) => {
       if (error) {
@@ -154,12 +236,107 @@ db.serialize(() => {
           'PETCARE ERROR creando pets:',
           error.message
         );
-      } else {
-        console.log('PETCARE: Tabla pets lista');
+
+        return;
       }
+
+      console.log(
+        'PETCARE: Tabla pets lista'
+      );
+
+      // ------------------------------------
+      // MIGRACIÓN PARA BASES EXISTENTES
+      // ------------------------------------
+      //
+      // Si petcare.db ya existía antes de
+      // incorporar peso y alergias,
+      // CREATE TABLE IF NOT EXISTS no agrega
+      // automáticamente las nuevas columnas.
+      //
+
+      db.all(
+        `PRAGMA table_info(pets)`,
+        [],
+        (pragmaError, columnas) => {
+          if (pragmaError) {
+            console.error(
+              'PETCARE ERROR verificando pets:',
+              pragmaError.message
+            );
+
+            return;
+          }
+
+          const existePeso =
+            columnas.some(
+              (columna) =>
+                columna.name === 'peso'
+            );
+
+          const existeAlergias =
+            columnas.some(
+              (columna) =>
+                columna.name === 'alergias'
+            );
+
+          if (!existePeso) {
+            db.run(
+              `
+                ALTER TABLE pets
+                ADD COLUMN peso REAL
+              `,
+              (alterError) => {
+                if (alterError) {
+                  console.error(
+                    'PETCARE ERROR agregando peso:',
+                    alterError.message
+                  );
+
+                  return;
+                }
+
+                console.log(
+                  'PETCARE: Columna peso agregada correctamente'
+                );
+              }
+            );
+          } else {
+            console.log(
+              'PETCARE: Columna peso lista'
+            );
+          }
+
+          if (!existeAlergias) {
+            db.run(
+              `
+                ALTER TABLE pets
+                ADD COLUMN alergias TEXT
+              `,
+              (alterError) => {
+                if (alterError) {
+                  console.error(
+                    'PETCARE ERROR agregando alergias:',
+                    alterError.message
+                  );
+
+                  return;
+                }
+
+                console.log(
+                  'PETCARE: Columna alergias agregada correctamente'
+                );
+              }
+            );
+          } else {
+            console.log(
+              'PETCARE: Columna alergias lista'
+            );
+          }
+        }
+      );
     }
   );
-});
+  }); // CIERRA db.serialize
 
 // ==========================================
 // CREACIÓN DE TOKENS
@@ -203,7 +380,8 @@ function validarPeticion(req, res, next) {
   if (!errores.isEmpty()) {
     return res.status(422).json({
       error: 'VALIDATION_ERROR',
-      mensaje: 'Existen errores en los campos enviados.',
+      mensaje:
+        'Existen errores en los campos enviados.',
       campos: errores.array().map((error) => ({
         campo: error.path,
         mensaje: error.msg,
@@ -219,21 +397,27 @@ function validarPeticion(req, res, next) {
 // ==========================================
 
 function autenticarToken(req, res, next) {
-  const authorization = req.headers.authorization;
+  const authorization =
+    req.headers.authorization;
 
   if (!authorization) {
     return res.status(401).json({
       error: 'UNAUTHORIZED',
-      mensaje: 'No se proporcionó un token de acceso.',
+      mensaje:
+        'No se proporcionó un token de acceso.',
     });
   }
 
   const partes = authorization.split(' ');
 
-  if (partes.length !== 2 || partes[0] !== 'Bearer') {
+  if (
+    partes.length !== 2 ||
+    partes[0] !== 'Bearer'
+  ) {
     return res.status(401).json({
       error: 'UNAUTHORIZED',
-      mensaje: 'Formato de autorización inválido.',
+      mensaje:
+        'Formato de autorización inválido.',
     });
   }
 
@@ -248,7 +432,8 @@ function autenticarToken(req, res, next) {
     if (payload.type !== 'access') {
       return res.status(401).json({
         error: 'UNAUTHORIZED',
-        mensaje: 'El token no es un token de acceso válido.',
+        mensaje:
+          'El token no es un token de acceso válido.',
       });
     }
 
@@ -262,13 +447,15 @@ function autenticarToken(req, res, next) {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         error: 'TOKEN_EXPIRED',
-        mensaje: 'El token de acceso ha expirado.',
+        mensaje:
+          'El token de acceso ha expirado.',
       });
     }
 
     return res.status(401).json({
       error: 'UNAUTHORIZED',
-      mensaje: 'El token de acceso no es válido.',
+      mensaje:
+        'El token de acceso no es válido.',
     });
   }
 }
@@ -279,7 +466,8 @@ function autenticarToken(req, res, next) {
 
 app.get('/', (req, res) => {
   res.json({
-    mensaje: 'Backend de PetCare funcionando correctamente',
+    mensaje:
+      'Backend de PetCare funcionando correctamente',
     estado: 'OK',
   });
 });
@@ -307,8 +495,13 @@ app.post(
     body('nombre')
       .trim()
       .notEmpty()
-      .withMessage('El nombre es obligatorio.')
-      .isLength({ min: 2, max: 100 })
+      .withMessage(
+        'El nombre es obligatorio.'
+      )
+      .isLength({
+        min: 2,
+        max: 100,
+      })
       .withMessage(
         'El nombre debe tener entre 2 y 100 caracteres.'
       ),
@@ -316,11 +509,15 @@ app.post(
     body('email')
       .trim()
       .isEmail()
-      .withMessage('El correo electrónico no es válido.')
+      .withMessage(
+        'El correo electrónico no es válido.'
+      )
       .normalizeEmail(),
 
     body('password')
-      .isLength({ min: 6 })
+      .isLength({
+        min: 6,
+      })
       .withMessage(
         'La contraseña debe tener al menos 6 caracteres.'
       ),
@@ -336,46 +533,53 @@ app.post(
         password,
       } = req.body;
 
-      const usuarioExistente = await dbGet(
-        `
-        SELECT id
-        FROM users
-        WHERE email = ?
-        `,
-        [email]
-      );
+      const usuarioExistente =
+        await dbGet(
+          `
+            SELECT id
+            FROM users
+            WHERE email = ?
+          `,
+          [email]
+        );
 
       if (usuarioExistente) {
         return res.status(409).json({
           error: 'EMAIL_EXISTS',
-          mensaje: 'El correo electrónico ya está registrado.',
+          mensaje:
+            'El correo electrónico ya está registrado.',
         });
       }
 
-      const passwordHash = await bcrypt.hash(
-        password,
-        12
-      );
+      const passwordHash =
+        await bcrypt.hash(
+          password,
+          12
+        );
 
       const userId = uuidv4();
-      const createdAt = new Date().toISOString();
+
+      const createdAt =
+        new Date().toISOString();
 
       await dbRun(
         `
-        INSERT INTO users (
-          id,
-          nombre,
-          email,
-          password_hash,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?)
+          INSERT INTO users (
+            id,
+            nombre,
+            email,
+            password_hash,
+            telefono,
+            created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
         `,
         [
           userId,
           nombre,
           email,
           passwordHash,
+          null,
           createdAt,
         ]
       );
@@ -384,17 +588,22 @@ app.post(
         id: userId,
         nombre,
         email,
+        telefono: null,
       };
 
-      const accessToken = crearAccessToken(user);
-      const refreshToken = crearRefreshToken(user);
+      const accessToken =
+        crearAccessToken(user);
+
+      const refreshToken =
+        crearRefreshToken(user);
 
       console.log(
         `PETCARE: Usuario registrado ${email}`
       );
 
       return res.status(201).json({
-        mensaje: 'Usuario registrado correctamente.',
+        mensaje:
+          'Usuario registrado correctamente.',
         usuario: user,
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -407,7 +616,8 @@ app.post(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible registrar el usuario.',
+        mensaje:
+          'No fue posible registrar el usuario.',
       });
     }
   }
@@ -424,12 +634,16 @@ app.post(
     body('email')
       .trim()
       .isEmail()
-      .withMessage('El correo electrónico no es válido.')
+      .withMessage(
+        'El correo electrónico no es válido.'
+      )
       .normalizeEmail(),
 
     body('password')
       .notEmpty()
-      .withMessage('La contraseña es obligatoria.'),
+      .withMessage(
+        'La contraseña es obligatoria.'
+      ),
   ],
 
   validarPeticion,
@@ -443,14 +657,15 @@ app.post(
 
       const user = await dbGet(
         `
-        SELECT
-          id,
-          nombre,
-          email,
-          password_hash,
-          created_at
-        FROM users
-        WHERE email = ?
+          SELECT
+            id,
+            nombre,
+            email,
+            password_hash,
+            telefono,
+            created_at
+          FROM users
+          WHERE email = ?
         `,
         [email]
       );
@@ -458,7 +673,8 @@ app.post(
       if (!user) {
         return res.status(401).json({
           error: 'INVALID_CREDENTIALS',
-          mensaje: 'Correo o contraseña incorrectos.',
+          mensaje:
+            'Correo o contraseña incorrectos.',
         });
       }
 
@@ -471,7 +687,8 @@ app.post(
       if (!passwordCorrecta) {
         return res.status(401).json({
           error: 'INVALID_CREDENTIALS',
-          mensaje: 'Correo o contraseña incorrectos.',
+          mensaje:
+            'Correo o contraseña incorrectos.',
         });
       }
 
@@ -479,6 +696,7 @@ app.post(
         id: user.id,
         nombre: user.nombre,
         email: user.email,
+        telefono: user.telefono,
       };
 
       const accessToken =
@@ -492,11 +710,13 @@ app.post(
       );
 
       return res.json({
-        mensaje: 'Inicio de sesión correcto.',
+        mensaje:
+          'Inicio de sesión correcto.',
         usuario: userPublic,
         access_token: accessToken,
         refresh_token: refreshToken,
-        expires_in: ACCESS_TOKEN_MINUTES * 60,
+        expires_in:
+          ACCESS_TOKEN_MINUTES * 60,
       });
     } catch (error) {
       console.error(
@@ -506,7 +726,8 @@ app.post(
 
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        mensaje: 'No fue posible iniciar sesión.',
+        mensaje:
+          'No fue posible iniciar sesión.',
       });
     }
   }
@@ -544,15 +765,19 @@ app.post(
         );
       } catch (error) {
         return res.status(401).json({
-          error: 'REFRESH_TOKEN_INVALID',
+          error:
+            'REFRESH_TOKEN_INVALID',
           mensaje:
             'El refresh token no es válido o ha expirado.',
         });
       }
 
-      if (payload.type !== 'refresh') {
+      if (
+        payload.type !== 'refresh'
+      ) {
         return res.status(401).json({
-          error: 'REFRESH_TOKEN_INVALID',
+          error:
+            'REFRESH_TOKEN_INVALID',
           mensaje:
             'El token enviado no es un refresh token.',
         });
@@ -560,12 +785,13 @@ app.post(
 
       const user = await dbGet(
         `
-        SELECT
-          id,
-          nombre,
-          email
-        FROM users
-        WHERE id = ?
+          SELECT
+            id,
+            nombre,
+            email,
+            telefono
+          FROM users
+          WHERE id = ?
         `,
         [payload.sub]
       );
@@ -573,7 +799,8 @@ app.post(
       if (!user) {
         return res.status(401).json({
           error: 'USER_NOT_FOUND',
-          mensaje: 'El usuario ya no existe.',
+          mensaje:
+            'El usuario ya no existe.',
         });
       }
 
@@ -588,10 +815,14 @@ app.post(
       );
 
       return res.json({
-        mensaje: 'Token renovado correctamente.',
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-        expires_in: ACCESS_TOKEN_MINUTES * 60,
+        mensaje:
+          'Token renovado correctamente.',
+        access_token:
+          newAccessToken,
+        refresh_token:
+          newRefreshToken,
+        expires_in:
+          ACCESS_TOKEN_MINUTES * 60,
       });
     } catch (error) {
       console.error(
@@ -614,18 +845,21 @@ app.post(
 
 app.get(
   '/api/auth/me',
+
   autenticarToken,
+
   async (req, res) => {
     try {
       const user = await dbGet(
         `
-        SELECT
-          id,
-          nombre,
-          email,
-          created_at
-        FROM users
-        WHERE id = ?
+          SELECT
+            id,
+            nombre,
+            email,
+            telefono,
+            created_at
+          FROM users
+          WHERE id = ?
         `,
         [req.user.id]
       );
@@ -633,7 +867,8 @@ app.get(
       if (!user) {
         return res.status(404).json({
           error: 'USER_NOT_FOUND',
-          mensaje: 'Usuario no encontrado.',
+          mensaje:
+            'Usuario no encontrado.',
         });
       }
 
@@ -656,26 +891,152 @@ app.get(
 );
 
 // ==========================================
+// ACTUALIZAR PERFIL DEL USUARIO
+// ==========================================
+
+app.put(
+  '/api/auth/me',
+
+  autenticarToken,
+
+  [
+    body('nombre')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'El nombre es obligatorio.'
+      )
+      .isLength({
+        min: 2,
+        max: 100,
+      })
+      .withMessage(
+        'El nombre debe tener entre 2 y 100 caracteres.'
+      ),
+
+    body('telefono')
+      .optional({
+        nullable: true,
+      })
+      .trim()
+      .isLength({
+        max: 20,
+      })
+      .withMessage(
+        'El teléfono no puede superar 20 caracteres.'
+      ),
+  ],
+
+  validarPeticion,
+
+  async (req, res) => {
+    try {
+      const nombre =
+        req.body.nombre.trim();
+
+      const telefono =
+        req.body.telefono == null ||
+        req.body.telefono
+          .trim() === ''
+          ? null
+          : req.body.telefono.trim();
+
+      const usuarioExistente =
+        await dbGet(
+          `
+            SELECT id
+            FROM users
+            WHERE id = ?
+          `,
+          [req.user.id]
+        );
+
+      if (!usuarioExistente) {
+        return res.status(404).json({
+          error: 'USER_NOT_FOUND',
+          mensaje:
+            'Usuario no encontrado.',
+        });
+      }
+
+      await dbRun(
+        `
+          UPDATE users
+          SET
+            nombre = ?,
+            telefono = ?
+          WHERE id = ?
+        `,
+        [
+          nombre,
+          telefono,
+          req.user.id,
+        ]
+      );
+
+      const user = await dbGet(
+        `
+          SELECT
+            id,
+            nombre,
+            email,
+            telefono,
+            created_at
+          FROM users
+          WHERE id = ?
+        `,
+        [req.user.id]
+      );
+
+      console.log(
+        `PETCARE: Perfil actualizado ${user.email}`
+      );
+
+      return res.json({
+        mensaje:
+          'Perfil actualizado correctamente.',
+        usuario: user,
+      });
+    } catch (error) {
+      console.error(
+        'PETCARE ERROR PUT /api/auth/me:',
+        error.message
+      );
+
+      return res.status(500).json({
+        error: 'SERVER_ERROR',
+        mensaje:
+          'No fue posible actualizar el perfil.',
+      });
+    }
+  }
+);
+
+// ==========================================
 // LISTAR MASCOTAS
 // ==========================================
 
 app.get(
   '/api/pets',
+
   autenticarToken,
+
   async (req, res) => {
     try {
       const pets = await dbAll(
         `
-        SELECT
-          id,
-          nombre,
-          especie,
-          raza,
-          edad,
-          updated_at
-        FROM pets
-        WHERE user_id = ?
-        ORDER BY nombre ASC
+          SELECT
+            id,
+            nombre,
+            especie,
+            raza,
+            edad,
+            peso,
+            alergias,
+            updated_at
+          FROM pets
+          WHERE user_id = ?
+          ORDER BY nombre ASC
         `,
         [req.user.id]
       );
@@ -730,7 +1091,9 @@ app.post(
       .withMessage(
         'El nombre de la mascota es obligatorio.'
       )
-      .isLength({ max: 100 })
+      .isLength({
+        max: 100,
+      })
       .withMessage(
         'El nombre de la mascota no puede superar 100 caracteres.'
       ),
@@ -750,10 +1113,36 @@ app.post(
       ),
 
     body('edad')
-      .isInt({ min: 0, max: 100 })
+      .isInt({
+        min: 0,
+        max: 100,
+      })
       .withMessage(
         'La edad debe ser un número entero entre 0 y 100.'
       ),
+
+        body('peso')
+      .optional({
+        nullable: true,
+      })
+      .isFloat({
+        min: 0.1,
+        max: 500,
+      })
+      .withMessage(
+        'El peso debe ser un número válido entre 0.1 y 500 kg.'
+      ),
+
+    body('alergias')
+      .optional({
+        nullable: true,
+      })
+      .isLength({
+        max: 500,
+      })
+      .withMessage(
+        'Las alergias no pueden superar 500 caracteres.'
+      ),  
   ],
 
   validarPeticion,
@@ -766,45 +1155,45 @@ app.post(
         especie,
         raza,
         edad,
-      } = req.body;
+        peso,
+        alergias,
+    } = req.body;
 
-      // ------------------------------------------
+      // ------------------------------------
       // USAR ID DEL CLIENTE O GENERAR UNO
-      // ------------------------------------------
+      // ------------------------------------
 
-      const petId = id || uuidv4();
+      const petId =
+        id || uuidv4();
 
       const updatedAt =
         new Date().toISOString();
 
-      // ------------------------------------------
+      // ------------------------------------
       // COMPROBAR SI YA EXISTE
-      // ------------------------------------------
-      //
-      // Si existe con el mismo usuario e ID,
-      // significa que probablemente estamos
-      // procesando nuevamente una operación
-      // offline ya aplicada.
-      //
+      // ------------------------------------
 
-      const mascotaExistente = await dbGet(
-        `
-        SELECT
-          id,
-          nombre,
-          especie,
-          raza,
-          edad,
-          updated_at
-        FROM pets
-        WHERE id = ?
-        AND user_id = ?
-        `,
-        [
-          petId,
-          req.user.id,
-        ]
-      );
+      const mascotaExistente =
+      await dbGet(
+    `
+      SELECT
+        id,
+        nombre,
+        especie,
+        raza,
+        edad,
+        peso,
+        alergias,
+        updated_at
+      FROM pets
+      WHERE id = ?
+      AND user_id = ?
+    `,
+    [
+      petId,
+      req.user.id,
+    ]
+  );
 
       if (mascotaExistente) {
         console.log(
@@ -814,27 +1203,30 @@ app.post(
         return res.status(200).json({
           mensaje:
             'La mascota ya existía. Operación considerada idempotente.',
-          datos: mascotaExistente,
+          datos:
+            mascotaExistente,
           idempotente: true,
         });
       }
 
-      // ------------------------------------------
+      // ------------------------------------
       // INSERTAR MASCOTA
-      // ------------------------------------------
+      // ------------------------------------
 
       await dbRun(
         `
-        INSERT INTO pets (
-          id,
-          user_id,
-          nombre,
-          especie,
-          raza,
-          edad,
-          updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO pets (
+            id,
+            user_id,
+            nombre,
+            especie,
+            raza,
+            edad,
+            peso,
+            alergias,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           petId,
@@ -843,22 +1235,31 @@ app.post(
           especie,
           raza,
           Number(edad),
+          peso == null
+            ? null
+            : Number(peso),
+          alergias == null ||
+          String(alergias).trim() === ''
+            ? null
+            : String(alergias).trim(),
           updatedAt,
         ]
       );
 
       const pet = await dbGet(
         `
-        SELECT
-          id,
-          nombre,
-          especie,
-          raza,
-          edad,
-          updated_at
-        FROM pets
-        WHERE id = ?
-        AND user_id = ?
+          SELECT
+            id,
+            nombre,
+            especie,
+            raza,
+            edad,
+            peso,
+            alergias,
+            updated_at
+          FROM pets
+          WHERE id = ?
+          AND user_id = ?
         `,
         [
           petId,
@@ -877,27 +1278,30 @@ app.post(
         idempotente: false,
       });
     } catch (error) {
-      // ------------------------------------------
+      // ------------------------------------
       // POSIBLE DUPLICADO POR CONCURRENCIA
-      // ------------------------------------------
+      // ------------------------------------
 
       if (
         error &&
-        error.code === 'SQLITE_CONSTRAINT'
+        error.code ===
+          'SQLITE_CONSTRAINT'
       ) {
         const mascotaExistente =
           await dbGet(
             `
-            SELECT
-              id,
-              nombre,
-              especie,
-              raza,
-              edad,
-              updated_at
-            FROM pets
-            WHERE id = ?
-            AND user_id = ?
+              SELECT
+                id,
+                nombre,
+                especie,
+                raza,
+                edad,
+                peso,
+                alergias,
+                updated_at
+              FROM pets
+              WHERE id = ?
+              AND user_id = ?
             `,
             [
               req.body.id,
@@ -909,7 +1313,8 @@ app.post(
           return res.status(200).json({
             mensaje:
               'La mascota ya existía. Operación considerada idempotente.',
-            datos: mascotaExistente,
+            datos:
+              mascotaExistente,
             idempotente: true,
           });
         }
@@ -930,19 +1335,166 @@ app.post(
 );
 
 // ==========================================
-// ELIMINAR MASCOTA
+// ACTUALIZAR MASCOTA
 // ==========================================
 
-app.delete(
+app.put(
   '/api/pets/:id',
+
   autenticarToken,
+
+  [
+    body('nombre')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'El nombre de la mascota es obligatorio.'
+      )
+      .isLength({
+        max: 100,
+      })
+      .withMessage(
+        'El nombre de la mascota no puede superar 100 caracteres.'
+      ),
+
+    body('especie')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'La especie es obligatoria.'
+      ),
+
+    body('raza')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'La raza es obligatoria.'
+      ),
+
+    body('edad')
+      .isInt({
+        min: 0,
+        max: 100,
+      })
+      .withMessage(
+        'La edad debe ser un número entero entre 0 y 100.'
+      ),
+
+    body('peso')
+      .optional({
+        nullable: true,
+      })
+      .isFloat({
+        min: 0.1,
+        max: 500,
+      })
+      .withMessage(
+        'El peso debe ser un número válido entre 0.1 y 500 kg.'
+      ),
+
+    body('alergias')
+      .optional({
+        nullable: true,
+      })
+      .isLength({
+        max: 500,
+      })
+      .withMessage(
+        'Las alergias no pueden superar 500 caracteres.'
+      ),
+  ],
+
+  validarPeticion,
+
   async (req, res) => {
     try {
-      const resultado = await dbRun(
+      const {
+        nombre,
+        especie,
+        raza,
+        edad,
+        peso,
+        alergias,
+      } = req.body;
+
+      const mascotaExistente =
+        await dbGet(
+          `
+            SELECT id
+            FROM pets
+            WHERE id = ?
+            AND user_id = ?
+          `,
+          [
+            req.params.id,
+            req.user.id,
+          ]
+        );
+
+      if (!mascotaExistente) {
+        return res.status(404).json({
+          error: 'PET_NOT_FOUND',
+          mensaje:
+            'Mascota no encontrada.',
+        });
+      }
+
+      const updatedAt =
+        new Date().toISOString();
+
+      const pesoNormalizado =
+        peso == null ||
+        peso === ''
+          ? null
+          : Number(peso);
+
+      const alergiasNormalizadas =
+        alergias == null ||
+        String(alergias).trim() === ''
+          ? null
+          : String(alergias).trim();
+
+      await dbRun(
         `
-        DELETE FROM pets
-        WHERE id = ?
-        AND user_id = ?
+          UPDATE pets
+          SET
+            nombre = ?,
+            especie = ?,
+            raza = ?,
+            edad = ?,
+            peso = ?,
+            alergias = ?,
+            updated_at = ?
+          WHERE id = ?
+          AND user_id = ?
+        `,
+        [
+          nombre.trim(),
+          especie.trim(),
+          raza.trim(),
+          Number(edad),
+          pesoNormalizado,
+          alergiasNormalizadas,
+          updatedAt,
+          req.params.id,
+          req.user.id,
+        ]
+      );
+
+      const pet = await dbGet(
+        `
+          SELECT
+            id,
+            nombre,
+            especie,
+            raza,
+            edad,
+            peso,
+            alergias,
+            updated_at
+          FROM pets
+          WHERE id = ?
+          AND user_id = ?
         `,
         [
           req.params.id,
@@ -950,10 +1502,63 @@ app.delete(
         ]
       );
 
-      if (resultado.changes === 0) {
+      console.log(
+        `PETCARE: Mascota actualizada ${pet.nombre} (${pet.id})`
+      );
+
+      return res.json({
+        mensaje:
+          'Mascota actualizada correctamente.',
+        datos: pet,
+      });
+    } catch (error) {
+      console.error(
+        'PETCARE ERROR PUT /api/pets/:id:',
+        error.message
+      );
+
+      return res.status(500).json({
+        error: 'SERVER_ERROR',
+        mensaje:
+          'No fue posible actualizar la mascota.',
+      });
+    }
+  }
+);
+
+
+// ==========================================
+// ELIMINAR MASCOTA
+// ==========================================
+
+app.delete(
+  '/api/pets/:id',
+
+  autenticarToken,
+
+  async (req, res) => {
+    try {
+      const resultado =
+        await dbRun(
+          `
+            DELETE FROM pets
+            WHERE id = ?
+            AND user_id = ?
+          `,
+          [
+            req.params.id,
+            req.user.id,
+          ]
+        );
+
+      if (
+        resultado.changes === 0
+      ) {
         return res.status(404).json({
-          error: 'PET_NOT_FOUND',
-          mensaje: 'Mascota no encontrada.',
+          error:
+            'PET_NOT_FOUND',
+          mensaje:
+            'Mascota no encontrada.',
         });
       }
 
@@ -980,18 +1585,20 @@ app.delete(
 // MANEJO DE ERRORES GENERALES
 // ==========================================
 
-app.use((error, req, res, next) => {
-  console.error(
-    'PETCARE ERROR GENERAL:',
-    error.message
-  );
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      'PETCARE ERROR GENERAL:',
+      error.message
+    );
 
-  res.status(500).json({
-    error: 'SERVER_ERROR',
-    mensaje:
-      'Ocurrió un error inesperado.',
-  });
-});
+    res.status(500).json({
+      error: 'SERVER_ERROR',
+      mensaje:
+        'Ocurrió un error inesperado.',
+    });
+  }
+);
 
 // ==========================================
 // INICIAR SERVIDOR
@@ -1004,9 +1611,11 @@ app.listen(
     console.log(
       '=========================================='
     );
+
     console.log(
-      '      PETCARE BACKEND INICIADO'
+      '       PETCARE BACKEND INICIADO'
     );
+
     console.log(
       '=========================================='
     );
@@ -1029,6 +1638,10 @@ app.listen(
 
     console.log(
       `Refresh token: ${REFRESH_TOKEN_DAYS} días`
+    );
+
+    console.log(
+      'Perfil: nombre y teléfono editables'
     );
 
     console.log(

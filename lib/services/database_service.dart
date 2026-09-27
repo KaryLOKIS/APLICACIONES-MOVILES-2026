@@ -49,7 +49,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -78,6 +78,8 @@ class DatabaseService {
         especie TEXT NOT NULL,
         raza TEXT NOT NULL,
         edad INTEGER NOT NULL,
+        peso REAL,
+        alergias TEXT,
         updated_at TEXT NOT NULL,
         sync_status TEXT NOT NULL,
         deleted INTEGER NOT NULL DEFAULT 0
@@ -432,6 +434,26 @@ class DatabaseService {
         'PETCARE DIAGNOSTICO: TABLA DEWORMINGS '
         'CREADA EN MIGRACION',
       );
+    }    
+    
+    // =======================================================
+    // VERSION 8
+    // Agrega peso y alergias a mascotas
+    // =======================================================
+
+    if (oldVersion < 8) {
+      await db.execute(
+        'ALTER TABLE pets ADD COLUMN peso REAL',
+      );
+
+      await db.execute(
+        'ALTER TABLE pets ADD COLUMN alergias TEXT',
+      );
+
+      print(
+        'PETCARE DIAGNOSTICO: '
+        'COLUMNAS PESO Y ALERGIAS AGREGADAS A PETS',
+      );
     }
   }
 
@@ -669,6 +691,36 @@ class DatabaseService {
     );
   }
 
+    // =========================================================
+  // ACTUALIZAR INFORMACIÓN DE MASCOTA
+  // Peso y alergias
+  // =========================================================
+
+  Future<void> actualizarInformacionMascota({
+    required String id,
+    required double? peso,
+    required String alergias,
+  }) async {
+    final db = await database;
+
+    await db.update(
+      'pets',
+      {
+        'peso': peso,
+        'alergias': alergias.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+        'sync_status': 'pending',
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'INFORMACION DE MASCOTA ACTUALIZADA = $id',
+    );
+  }
+
   // =========================================================
   // ELIMINAR MASCOTA
   // =========================================================
@@ -850,6 +902,10 @@ class DatabaseService {
   // INSERTAR CITA VETERINARIA
   // =========================================================
 
+    // =========================================================
+  // INSERTAR CITA VETERINARIA
+  // =========================================================
+
   Future<void> insertarCitaVeterinaria({
     required String mascota,
     required String veterinario,
@@ -868,11 +924,9 @@ class DatabaseService {
         'motivo': motivo.trim(),
         'fecha': fecha,
         'hora': hora,
-        'created_at':
-            DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toIso8601String(),
       },
-      conflictAlgorithm:
-          ConflictAlgorithm.abort,
+      conflictAlgorithm: ConflictAlgorithm.abort,
     );
 
     print(
@@ -895,15 +949,13 @@ class DatabaseService {
         orderBy: 'fecha ASC, hora ASC',
       );
 
-      final citas =
-          resultados
-              .map(
-                (cita) =>
-                    Map<String, dynamic>.from(
-                  cita,
-                ),
-              )
-              .toList();
+      final citas = resultados
+          .map(
+            (cita) => Map<String, dynamic>.from(
+              cita,
+            ),
+          )
+          .toList();
 
       print(
         'PETCARE DIAGNOSTICO: '
@@ -920,6 +972,39 @@ class DatabaseService {
 
       rethrow;
     }
+  }
+
+  // =========================================================
+  // ACTUALIZAR CITA VETERINARIA
+  // =========================================================
+
+  Future<void> actualizarCitaVeterinaria({
+    required String id,
+    required String mascota,
+    required String veterinario,
+    required String motivo,
+    required String fecha,
+    required String hora,
+  }) async {
+    final db = await database;
+
+    await db.update(
+      'appointments',
+      {
+        'mascota': mascota.trim(),
+        'veterinario': veterinario.trim(),
+        'motivo': motivo.trim(),
+        'fecha': fecha,
+        'hora': hora,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    print(
+      'PETCARE DIAGNOSTICO: '
+      'CITA VETERINARIA ACTUALIZADA = $id',
+    );
   }
 
   // =========================================================
@@ -1746,3 +1831,4 @@ class DatabaseService {
     );
   }
 }
+

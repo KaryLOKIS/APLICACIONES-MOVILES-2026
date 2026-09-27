@@ -11,6 +11,10 @@ class PetRemoteDataSource {
 
   final ApiClient _apiClient;
 
+  // =========================================================
+  // OBTENER MASCOTAS
+  // =========================================================
+
   Future<List<Pet>> obtenerMascotas() async {
     try {
       final response = await _apiClient.dio.get(
@@ -47,6 +51,10 @@ class PetRemoteDataSource {
     }
   }
 
+  // =========================================================
+  // CREAR MASCOTA
+  // =========================================================
+
   Future<Pet> crearMascota(Pet pet) async {
     try {
       final response = await _apiClient.dio.post(
@@ -71,14 +79,66 @@ class PetRemoteDataSource {
       }
 
       return Pet.fromJson(
-        Map<String, dynamic>.from(mascotaData),
+        Map<String, dynamic>.from(
+          mascotaData,
+        ),
       );
     } on DioException {
       rethrow;
     }
   }
 
-  Future<void> eliminarMascota(String id) async {
+  // =========================================================
+  // ACTUALIZAR MASCOTA
+  // =========================================================
+
+  Future<Pet> actualizarMascota(Pet pet) async {
+    try {
+      final response = await _apiClient.dio.put(
+        '${ApiConfig.petsEndpoint}/${pet.id}',
+        data: {
+          'nombre': pet.nombre,
+          'especie': pet.especie,
+          'raza': pet.raza,
+          'edad': pet.edad,
+          'peso': pet.peso,
+          'alergias': pet.alergias,
+        },
+      );
+
+      final data = response.data;
+
+      if (data is! Map) {
+        throw Exception(
+          'La respuesta del servidor no tiene un formato válido.',
+        );
+      }
+
+      final mascotaData = data['datos'];
+
+      if (mascotaData is! Map) {
+        throw Exception(
+          'La respuesta del servidor no contiene los datos de la mascota actualizada.',
+        );
+      }
+
+      return Pet.fromJson(
+        Map<String, dynamic>.from(
+          mascotaData,
+        ),
+      );
+    } on DioException {
+      rethrow;
+    }
+  }
+
+  // =========================================================
+  // ELIMINAR MASCOTA
+  // =========================================================
+
+  Future<void> eliminarMascota(
+    String id,
+  ) async {
     try {
       await _apiClient.dio.delete(
         '${ApiConfig.petsEndpoint}/$id',
